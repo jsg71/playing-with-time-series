@@ -1,8 +1,130 @@
 """
-datamodules_npy.py
+─────────────────────────────────────────────────────────────────────────────
+ datamodules_npy.py — windowed *.npy* datasets for PyTorch / Lightning
+ Author: <your-name / date>
+─────────────────────────────────────────────────────────────────────────────
+
+FILE CONTENTS
+─────────────
+1. **StrikeDataset** – chunks a long 1-D waveform (saved as *.npy*) into
+   fixed-length windows and assigns a *binary* label to each window:
+       1 → overlaps at least one simulated “lightning burst”
+       0 → pure background noise.
+
+2. **NoiseDataset** – thin wrapper around *StrikeDataset* that returns
+   **only** noise windows (label==0).  Useful for denoiser AEs or GANs
+   that need “clean” exemplars.
+
+=================================================================
+THE DATA FORMAT EXPECTED
+=================================================================
+For each recording station the simulator outputs:
+
+    • <station>_wave.npy    # float32 1-D waveform, length S samples
+    • <station>_meta.json   # {"fs": 40000, "events": [t₀, t₁, …]}
+
+`events` are burst start-times in seconds; each burst is assumed to last
+exactly **40 ms** (configurable below).
+
+=================================================================
+STRIKEDATASET  —  DETAILED SPEC
+=================================================================
+Init parameters
+───────────────
+npy_path   : str | Path
+meta_path  : str | Path
+chunk_size : int = 16_384      # samples per window  (≈ 0.41 s at 40 kHz)
+overlap    : float = 0.5       # 0 → no overlap, 0.5 → 50 % overlap
+burst_ms   : int = 40          # burst duration (ms); set to 0 for “centre-only”
+
+Derived attributes
 ──────────────────
-Light-weight dataset utilities for the lightning-detection toy project.
+fs        : sampling rate, pulled from meta.json
+hop       : int(hop) = int(chunk_size * (1-overlap))
+n_win     : number of windows = floor((S - chunk_size) / hop) + 1
+wave      : np.memmap  view of the raw signal  (no RAM copies)
+_windows  : np.ndarray view shape (n_win, chunk_size) built with
+            `numpy.lib.stride_tricks.as_strided` → **zero-copy**
+
+Label logic (pseudocode)
+────────────────────────
+```
+labels = np.zeros(n_win, dtype=np.float32)
+for t in meta["events"]:
+    s0 = int(t * fs)                       # burst start sample
+    s1 = s0 + int(burst_ms * fs / 1000)    # burst end
+    first = max(0,  (s0 - chunk_size) // hop + 1)
+    last  = min(n_win-1,  s1 // hop)
+    labels[first : last+1] = 1
+```
+Thus a window is **positive** if *any* part overlaps a burst.
+
+PyTorch Dataset API
+───────────────────
+__len__()        → n_win
+__getitem__(idx) → (x, y)
+
+    x : torch.float32 tensor (1, chunk_size)
+    y : torch.float32 scalar  (0.0 or 1.0)
+
+RAM / IO facts
+──────────────
+• The *.npy* stays on disk as a memory-map – constant RAM use.
+• Window generation via as_strided is O(1) and copy-free.
+• First access to a window triggers a page-fault read (~4 KiB).
+
+=================================================================
+NOISEDATASET
+=================================================================
+Subclass of StrikeDataset that keeps an index list
+`noise_idx = np.where(labels == 0)` at init.
+
+__getitem__(i) returns **only** the signal tensor, discarding label.
+
+Ideal for:
+    * standard denoisers (learn x → x_clean)
+    * negative batches in contrastive objectives
+
+=================================================================
+STRENGTHS
+=================================================================
+✓ Memory-efficient – handles hours-long recordings on a laptop.
+✓ Overlap parameter doubles as a simple data-augmentation knob.
+✓ Works out-of-the-box with `torch.utils.data.DataLoader` and
+  PyTorch-Lightning datamodules.
+
+=================================================================
+WEAKNESSES & IMPROVEMENTS
+=================================================================
+✗ Burst duration hard-coded (40 ms) – expose via meta.json or arg.
+✗ Only binary labels – extend to multi-class for severity levels.
+✗ as_strided windows are non-contiguous – some exotic ops need `.copy()`.
+✗ No on-the-fly normalisation – add optional `mean/std` scaling.
+
+=================================================================
+EXAMPLE USAGE
+=================================================================
+```python
+from torch.utils.data import DataLoader
+from datamodules_npy import StrikeDataset, NoiseDataset
+
+# full strike/noise mix
+ds = StrikeDataset("stationA_wave.npy", "stationA_meta.json",
+                   chunk_size=16384, overlap=0.5)
+dl = DataLoader(ds, batch_size=32, shuffle=True, num_workers=4)
+
+# iterate
+for x, y in dl:                # x:(32,1,16384)  y:(32,)
+    ...
+
+# noise-only stream
+noise_ds = NoiseDataset("stationA_wave.npy", "stationA_meta.json")
+noise_dl = DataLoader(noise_ds, batch_size=64, shuffle=True)
+```
+
+─────────────────────────────────────────────────────────────────────────────
 """
+
 
 from pathlib import Path
 import json, numpy as np, torch

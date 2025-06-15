@@ -1,7 +1,131 @@
 #!/usr/bin/env python
 """
-train_ae.py – Train the autoencoder on pure-noise windows (unsupervised).
+─────────────────────────────────────────────────────────────────────────────
+ train_ae.py — Train a 1‑D U‑Net Denoising Auto‑Encoder on *noise‑only* windows
+ Author : <your‑name / date>
+─────────────────────────────────────────────────────────────────────────────
+
+WHY THIS SCRIPT?
+────────────────
+Legacy baseline ⇢ learn an **Auto‑Encoder (AE)** that *only* sees background
+noise.  When we later run it over the full recording, any lightning burst
+(or other anomaly) should produce a large reconstruction error because it
+doesn’t fit the learned “noise manifold”.
+
+High‑level flow
+───────────────
+1. Load StrikeDataset from a *.npy* waveform + *.json* meta.            fileciteturn6file0
+2. Slice into windows ➟ time‑based 60 / 20 / 20 split.
+3. Keep **noise windows** (label==0) for train + val.
+4. Train `UNet1D` AE (depth,base from CLI) with L1 loss.
+5. Save best checkpoint (lowest *val_mae*) and the split indices
+   so evaluation scripts can reuse the exact partition.
+
+=================================================================
+COMMAND‑LINE ARGUMENTS
+=================================================================
+--npy      PATH   **required**  waveform *.npy* (alias *_wave.npy allowed)
+--meta     PATH   **required**  matching meta.json
+--chunk    INT    4096     window length (samples)
+--overlap  FLOAT  0.5      0 ≤ overlap < 1  (0.5 ⇒ hop = 50 %)
+--bs       INT    128      batch size
+--epochs   INT    20       max epochs (no early‑stop by default)
+--depth    INT    4        U‑Net depth (encoder/decoder levels)
+--base     INT    16       channels in first encoder block
+--lr       FLOAT  1e‑3     Adam learning rate
+--device   auto|cpu|mps|cuda   auto → CUDA ▸ MPS ▸ CPU
+--ckpt     PATH   lightning_logs/ae_best.ckpt  output checkpoint file
+
+Argument rationale
+──────────────────
+chunk   : 4096 samples @ 40 kHz ≈ 102 ms — big enough to hold burst + context
+overlap : 0.5 doubles dataset size w/out big memory cost
+depth   : 4 ⇒ receptive field ±(9×2⁴)=±144 ≈ 3.6 ms per conv path
+lr      : 1e‑3 stable for Adam on MAE; adjust with `--lr` when changing `base`
+device  : “auto” keeps script portable across CPU‑only laptops and GPUs
+
+=================================================================
+DATASET & SPLITS
+=================================================================
+StrikeDataset             (see datamodules_npy.py)
+    windows : (n, chunk) view via numpy.as_strided  (zero‑copy)
+    labels  : 0 / 1 — produced from burst timestamps
+
+Sequential split 60‑20‑20 **by index (time order)**
+⋯ prevents future windows leaking into past during validation.
+
+Noise subset
+    idx_tr_noise = intersect(train_full, where(label==0))
+    idx_val_noise = intersect(val_full, where(label==0))
+
+Why sequential?
+Burst density can change across time (e.g. storm build‑up); random split
+would let the model “peek” at future distributions.
+
+=================================================================
+MODEL
+=================================================================
+UNet1D                (leela_ml.models.dae_unet: depth, base set via CLI)
+LightningModule       (LitAE) wraps the network + loss + metrics
+
+Training‑step  : L1Loss(recon,x)  (aka MAE)
+Validation‑step: logs val_l1 + updates MeanAbsoluteError metric
+Optimiser      : Adam(lr) — no scheduler for simplicity
+
+Checkpointing  : save **best** model w.r.t. `val_mae`
+Split indices  : *.split.npz* stores arrays {idx_train, idx_val, idx_test}
+
+=================================================================
+EXPECTED RESULTS (synthetic data, base=16 depth=4)
+=================================================================
+| Dataset     | val_mae ≈ | epochs |
+|-------------|-----------|--------|
+| stationA    | 0.012     | 18‑20  |
+| stationB    | 0.015     | 20     |
+
+Look for reconstruction‑error spikes ≥ 6×MAD at burst times.
+
+=================================================================
+STRENGTHS
+=================================================================
+✓ Single command reproducibility.
+✓ Time‑based split mimics real deployment chronology.
+✓ L1 loss encourages sharp reconstructions (vs MSE blur).
+✓ No GPU dependency; runs on CPU albeit slower.
+
+=================================================================
+WEAKNESSES & IMPROVEMENTS
+=================================================================
+✗ Training discards burst examples entirely → model may “hallucinate” them
+  as noise at inference.  *Fix*: denoise objective with paired data.
+✗ Adam with fixed LR; consider CosineAnnealing, OneCycleLR.
+✗ No **early stopping** → wasted epochs if plateau hit early.
+✗ BatchNorm inside UNet1D brittle on tiny `--bs`; swap to GroupNorm.
+✗ Single‑run log dir; parallel sweeps overwrite unless `--ckpt` changed.
+
+Future ideas
+────────────
+• STFT‑based multi‑loss (time‑domain L1 + freq‑domain L1).
+• t‑distributed latent regulariser (Variational AE).
+• Mixed‑precision (`torch.set_float32_matmul_precision("high")`) for speed.
+• Online augmentation: Gaussian noise scale jitter, phase shuffle.
+
+=================================================================
+EXAMPLE COMMAND
+=================================================================
+```bash
+python train_ae.py \
+  --npy data/stationA_wave.npy \
+  --meta data/stationA_meta.json \
+  --chunk 4096 --overlap 0.5 \
+  --bs 128 --epochs 30 --depth 4 --base 16 --lr 1e-3 \
+  --device cuda \
+  --ckpt models/ae_stationA.ckpt
+```
+
+─────────────────────────────────────────────────────────────────────────────
 """
+
 import argparse, glob, numpy as np, torch, pytorch_lightning as pl, shutil
 from pathlib import Path
 from torch.utils.data import DataLoader, TensorDataset

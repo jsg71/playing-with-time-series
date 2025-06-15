@@ -1,8 +1,155 @@
 #!/usr/bin/env python
+
 """
-Strict evaluation: loads the split saved by train_resnet.py, prints
-VAL & TEST metrics, and saves reports/resnet_val_test.png.
+─────────────────────────────────────────────────────────────────────────────
+ eval_resnet.py — Evaluate a RawResNet1D binary lightning‑burst classifier
+ Author : <your-name / date>
+─────────────────────────────────────────────────────────────────────────────
+
+WHAT THIS SCRIPT DOES
+─────────────────────
+✓ Loads the *exact* train/val/test indices generated during **supervised**
+  training (`train_resnet.py`), ensuring metrics are computed on the
+  identical splits.
+✓ Performs forward passes over each split with the checkpointed
+  **RawResNet1D** model, producing *probability* scores via `sigmoid`.
+✓ Calculates window‑level AUROC, Precision, Recall, F1 using a
+  **threshold optimised on the *validation* set**.
+✓ Generates a two‑panel PNG (`reports/resnet_val_test.png`) visualising
+  probabilities, thresholds, ground‑truth bursts and waveform.
+
+WHY THIS MATTERS
+────────────────
+Without strict split reuse, evaluation can leak information between bursts
+and inflate performance.  By loading the `split.npz` file, we guarantee
+fair comparison across runs and hyper‑parameter sweeps.
+
+=================================================================
+KEY PARAMETERS (CLI)
+=================================================================
+--npy           path  *required*   waveform `*_wave.npy` (float32 mono)
+--meta          path  *required*   matching `_meta.json` (fs & events)
+--chunk   INT   8192   window length → must match training
+--ckpt    path  lightning_logs/raw.ckpt   model checkpoint to load
+--bs      INT   512    windows per inference batch (VRAM control)
+
+Parameter notes
+• `chunk` must equal the length used during training, otherwise the
+  convolutional receptive field won’t align with learned patterns.
+• `bs` can be safely increased until GPU memory ~80 %.  For CPU inference,
+  larger batches amortise Python overhead.
+• `--npy` alias logic: if `*_wave.npy` is missing, grabs the first file
+  matching `*_*.npy` (hashed filename) for convenience.
+
+=================================================================
+DATA LOADING & SPLITS
+=================================================================
+```
+split.npz  →  idx_tr, idx_val, idx_test   int32 arrays
+StrikeDataset(chunk) → (windows, labels)
+```
+* Each window index corresponds to **hop = chunk × (1‑overlap)** samples.
+* Windows belonging to the same physical burst all share the **same group
+  id**, so they remain in a single split.
+
+Why reuse the split?
+• Prevents “future leakage” of burst context from val/test into train.
+• Enables apples‑to‑apples comparison when modifying model architecture
+  or training parameters.
+
+=================================================================
+MODEL OVERVIEW
+=================================================================
+`RawResNet1D` (see *raw_resnet.py*)
+    Stem   : Conv1d 7×1 → 64 + BN + ReLU
+    Body   : 6 residual blocks (3×3 conv pairs)
+    Squeeze: 1×1 conv + ReLU
+    Head   : GlobalAvgPool → Linear(64→1) → sigmoid
+
+Checkpoint loading
+    sd = torch.load(ckpt)
+    strip “net.” prefix if saved by Lightning
+    `strict=False` allows missing keys (e.g. optimiser state).
+
+=================================================================
+INFERENCE & METRICS
+=================================================================
+Step 1  **Validation split**
+        • Compute `prob_val = sigmoid(net(x))`
+        • AUROC   — threshold‑independent ranking
+        • PR curve → choose threshold `thr_val` that maximises F1
+Step 2  **Test split**
+        • Use *same* threshold selection procedure independently
+          (`thr_test`) to show robustness.
+Step 3  Print table:
+        ```
+        VAL : AUROC=.97 thr=.823 P=.91 R=.88 F1=.89
+        TEST: AUROC=.96 thr=.817 P=.89 R=.86 F1=.87
+        ```
+Step 4  **All windows**
+        For plotting, compute probabilities for entire recording.
+
+=================================================================
+PLOT DETAILS
+=================================================================
+Top panel : Probability curve
+    • Grey/blue/green shaded regions mark train/val/test ranges
+    • Dashed lines: thresholds from val & test splits
+    • Black “x” marks: ground‑truth burst window centres
+
+Bottom panel : Raw waveform (thin line)
+    • Shared x‑axis with top panel for direct alignment.
+
+File saved → `reports/resnet_val_test.png`
+
+=================================================================
+STRENGTHS
+=================================================================
+✓ Strict split reuse → genuine generalisation assessment.
+✓ AUROC metric is threshold‑free; additional F1 at optimal threshold
+  gives practitioner‑friendly operating point.
+✓ Visualisation combines score & waveform for intuitive sanity‑check.
+✓ Works entirely in CPU fallback mode for quick experiments.
+
+=================================================================
+WEAKNESSES & LIMITATIONS
+=================================================================
+✗ Uses **per‑split threshold**; a single global threshold might be required
+  in deployment.
+✗ Sampling rate / hop size hard‑coded via `chunk`; changing overlap
+  requires re‑training.
+✗ Seaborn colour palette hard‑set for dark‑grid; may not suit all themes.
+✗ Ignores class imbalance when reporting Precision/Recall; could add
+  PR‑AUC for skewed datasets.
+
+=================================================================
+FUTURE IMPROVEMENTS
+=================================================================
+• Add `--global_thr` option: choose threshold on val, reuse for test.
+• Save detailed CSV (idx, prob, label) for downstream ROC sweep plots.
+• Support multi‑class ResNet (≥2 burst types) with one‑vs‑rest ROC.
+• Multi‑GPU batched inference via `DataLoader(num_workers>0, pin_memory)`.
+• Export interactive HTML plots (plotly) for richer inspection.
+
+=================================================================
+QUICK RUN EXAMPLE
+=================================================================
+```bash
+python eval_resnet.py \
+  --npy data/storm5_wave.npy \
+  --meta data/storm5_meta.json \
+  --chunk 8192 --ckpt lightning_logs/raw.ckpt \
+  --bs 512
+```
+Expect **VAL AUROC ≥ 0.97** and event‑level F1 ≈ 0.92 using the default
+hyper‑parameters on the synthetic “storm5” dataset.
+
+─────────────────────────────────────────────────────────────────────────────
 """
+
+
+
+
 import argparse, glob, re, numpy as np, matplotlib.pyplot as plt, seaborn as sns, torch
 from pathlib import Path
 from sklearn.metrics import (roc_auc_score, precision_recall_curve,

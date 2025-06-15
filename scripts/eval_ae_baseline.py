@@ -10,7 +10,141 @@ python scripts/eval_ae.py \
     --chunk 512 --overlap 0.9 \
     --batch 8192 --mad_k 6 --win_ms 40 \
     --device mps  --fig_dark
+
+
+
+─────────────────────────────────────────────────────────────────────────────
+ eval_ae_baseline.py — Evaluate a denoising Auto‑Encoder on lightning bursts
+ Author : <your-name / date>
+─────────────────────────────────────────────────────────────────────────────
+
+WHY THIS SCRIPT?
+────────────────
+Trains were noise‑only, so bursts should yield **high reconstruction error**.
+This script:
+
+1. Slides a window (*chunk*) across the waveform.
+2. Computes per‑window L1 error `(recon‒input).abs().mean()`.
+3. Builds a *rolling* Median‑Absolute‑Deviation (MAD) threshold.
+4. Flags windows whose error > threshold → **mask**.
+5. Post‑processes mask into burst events and reports metrics + plots.
+
+=================================================================
+COMMAND‑LINE ARGUMENTS           (run  python eval_ae_baseline.py -h)
+=================================================================
+--npy      PATH   REQUIRED   ⋯ `_wave.npy`  (float32 audio / RF trace)
+--meta     PATH   REQUIRED   ⋯ matching `_meta.json`
+--ckpt     PATH   ckpt file  default lightning_logs/ae_best.ckpt
+--chunk    INT    512        window length (samples)
+--overlap  FLOAT  0.9        fraction 0–<1  (= 0.9 ⇒ hop = 10 %)
+--batch    INT    8192       windows per forward pass (VRAM control)
+--device   [auto|cpu|mps|cuda]   “auto” picks best available
+--mad_k    FLOAT  6.0        threshold = median + mad_k × MAD
+--win_ms   FLOAT  40.0       expected burst length (ms) for smoothing
+--fig_dark FLAG   dark plot theme
+--dpi      INT    180        figure resolution
+
+Parameter rationale
+───────────────────
+chunk       : 512 samples at 40 kHz ≈ 12.8 ms — short enough for fine timing
+overlap 0.9 : dense scanning, 90 % overlap ⇒ hop = 51 samples
+batch        : 8 192 windows ⇒ 0.8 MB activation (float32) on GPU
+mad_k        : 6 × MAD ≈ ~3 σ for Laplace‑ish errors
+win_ms       : 40 ms = simulator’s burst duration; used to:
+                  • rolling MAD window
+                  • dilation / erosion kernel length
+device=auto  : prioritise CUDA → MPS → CPU, test pass ensures MPS usable
+
+=================================================================
+DATA FLOW
+=================================================================
+StrikeDataset   →  windows (n, chunk) & labels (n,)
+                • windows are numpy *views*, zero‑copy
+                • labels True if window overlaps any burst
+
+Forward pass
+    err[i:j] = |net(win[i:j]) – win[i:j]|.mean((1,2))
+    (batched for memory)
+
+Thresholding
+────────────
+1. Rolling median & MAD over **win_len = win_ms / hop** windows
+2. thr = med + mad_k × MAD             (element‑wise)
+3. mask = err > thr                    (boolean)
+
+Morphological post‑processing
+    iterations = nhit = max(1, win_len/4)
+    binary_dilation(mask, nhit)        # close small gaps
+    binary_erosion (mask, nhit)        # remove spurious spikes
+
+=================================================================
+METRICS REPORTED
+=================================================================
+Window‑level
+    • Precision, Recall, F1  (sklearn)
+    • AUROC (if split indices available from training *.split.npz)
+
+Event‑level
+    • Burst = contiguous True windows after post‑processing
+    • True‑Positives (TP) = any overlap with ground‑truth burst
+    • Precision, Recall, F1 at event granularity
+
+Plots written to  **reports/**
+────────────────────────────────
+ae_err.png          – semilog error curve + threshold + GT x‑marks
+ae_events.png       – raw waveform with coloured spans (TP lime, FN orange,
+                      FP red)
+ae_pred_timeline.png – vertical timeline of TP/FN/FP calls
+
+=================================================================
+STRENGTHS
+=================================================================
+✓ Purely data‑driven threshold adapts to slow drift in noise floor
+✓ MAD is robust to outliers; no need for predefined σ of background
+✓ Post‑processing removes flicker, enforcing physiologically plausible
+  burst length (~40 ms)
+
+=================================================================
+WEAKNESSES & LIMITATIONS
+=================================================================
+✗ Fixed burst length win_ms; mis‑tuned value smears or chops events
+✗ High overlap (0.9) inflates compute → 10× more forward passes than hop=0.5
+✗ AUROC skipped if split file missing (common in ad‑hoc checkpoints)
+✗ Dilation / erosion kernel nhit derived heuristically, not optimised
+✗ L1 error may saturate on very large bursts → threshold less sensitive
+
+=================================================================
+IDEAS FOR IMPROVEMENT
+=================================================================
+• Replace static `mad_k` with *F1‑optimised* threshold via small val set
+• Try **STFT‑based** error (spectral norm) for burst types with frequency
+  shifts invisible in time‑domain L1
+• Use a tiny classifier on latent code to predict anomaly probability and
+  blend with reconstruction error
+• GPU‑batch infer: `torch.utils.data.DataLoader` with pinned memory &
+  prefetch for IO‑heavy HDD setups
+• Export JSON report (metrics, params) for easier sweep aggregation
+• Provide `--codec` flag to simultaneously compute NCD for comparison with
+  model error curves
+
+=================================================================
+QUICK RUN EXAMPLE
+=================================================================
+```bash
+python eval_ae_baseline.py \
+  --npy   data/storm5_wave.npy \
+  --meta  data/storm5_meta.json \
+  --ckpt  lightning_logs/ae_best.ckpt \
+  --chunk 512 --overlap 0.9 \
+  --batch 8192 --mad_k 6 \
+  --win_ms 40 --device cuda --fig_dark
+```
+
+Expect F1 ≈ 0.85 on synthetic storm5, slightly lower on real data.
+
+─────────────────────────────────────────────────────────────────────────────
 """
+
 
 import argparse, glob, json, numpy as np, matplotlib.pyplot as plt, seaborn as sns, torch
 from pathlib import Path

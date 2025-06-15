@@ -1,14 +1,136 @@
 #!/usr/bin/env python3
-"""
-run_ncd.py – compression-based unsupervised lightning detector
---------------------------------------------------------------
 
-* splits waveform into sliding windows
-* NCD against previous window  (zlib | bz2 | lzma)
-* adaptive threshold  = median + k·MAD
-* merges short gaps, enforces min-duration
-* prints window/event metrics & writes three PNGs to ./reports
 """
+─────────────────────────────────────────────────────────────────────────────
+ run_ncd.py — Compression‑based unsupervised lightning‑burst detector
+ Author : <your‑name / date>
+─────────────────────────────────────────────────────────────────────────────
+
+BIG‑PICTURE IDEA
+────────────────
+Use **Normalised Compression Distance (NCD)** between consecutive windows
+to detect anomalies (lightning bursts) without any learned model.
+
+Why NCD works
+─────────────
+A burst changes local signal statistics (spectral content, amplitude
+distribution).  If two adjacent windows are *similar*, concatenating them
+won’t add new information, so their compressed length is ≈ max(C₁, C₂).
+If the second window contains a burst, C(join) grows sharply ⇒ NCD rises.
+
+Mathematically
+```
+NCD(A,B) = ( C(A+B) − min( C(A), C(B) ) ) / max( C(A), C(B) )
+```
+0  ≈ identical • ≈1  ≈ wholly different • >1 due to codec overhead
+
+=================================================================
+SCRIPT WORKFLOW
+=================================================================
+1. **StrikeDataset** loads waveform → sliding windows.
+2. Compute NCD for each window vs its predecessor (`ncd_adjacent`).
+3. Adaptive threshold = rolling median + *k*×MAD.
+4. Morphological ops clean flicker; windows above threshold = *burst mask*.
+5. Merge + prune mask into **events** and compute metrics.
+6. Write three diagnostic PNGs into *./reports*.
+
+=================================================================
+COMMAND‑LINE ARGUMENTS
+=================================================================
+--npy        PATH    REQUIRED   *_wave.npy* float32 mono waveform
+--meta       PATH    REQUIRED   *_meta.json* with {"fs":…, "events":…}
+--chunk      INT     512        window length (samples) — finer pulses => smaller
+--overlap    FLOAT   0.9        0≤o<1; hop = chunk×(1‑o)
+--codec      zlib|bz2|lzma  which std‑lib compressor; speed vs accuracy
+--mad_k      FLOAT   6.0        threshold offset = median + k×MAD
+--min_dur_ms FLOAT   10         minimum event duration kept after cleaning
+--gap_ms     FLOAT   10         merge events separated by < gap
+--dpi        INT     160        PNG resolution
+
+Parameter intuition
+───────────────────
+chunk 512     → 12.8 ms @ 40 kHz; high temporal resolution.
+overlap 0.9   → dense scan; 90 % redundancy but low latency.
+codec zlib    → fastest; bz2 ≈2× slower but better at long repeats;
+                lzma ≈3–4× slower, best compression ratio.
+mad_k 6       → ~3σ if error distribution Laplace‑like.
+min_dur_ms    → eliminates noisy one‑off spikes shorter than physical burst.
+gap_ms        → joins two bursts separated by small silence gap.
+
+=================================================================
+CORE FUNCTIONS & DECISIONS
+=================================================================
+`ncd_adjacent(win, codec)`
+    • Pre‑quantises float32 window to int16 (2 bytes/sample).
+    • Caches individual C(wᵢ) to reuse when computing C(wᵢ₋₁+wᵢ).
+    • Codec default = zlib; others exposed via CLI.
+
+Rolling Median + MAD
+    • `win_len = min_dur_ms / hop_ms` ==> adaptive to chunk & overlap.
+    • MAD robust to outliers ⇒ threshold adapts to slow drifts.
+
+Morphology passes
+    • Binary dilation(k) → close sub‑min gaps inside real burst.
+    • Binary erosion(k)  → remove tiny positives shorter than min_dur_ms.
+
+Event matching
+    *True burst* = contiguous １ windows labelled 1 in ground‑truth.
+    TP if any overlap between predicted and true span.
+
+Metrics printed
+────────────────
+Window level : Precision, Recall, F1, AUROC (if labels available)
+Event level  : Precision, Recall, F1 after overlap matching
+
+PNG outputs
+───────────
+reports/ncd_score.png        NCD curve + threshold (semi‑log)
+reports/ncd_events.png       Waveform with TP (lime), FN (orange), FP (red)
+reports/ncd_pred_timeline.png Timeline bars for visual debug
+
+=================================================================
+STRENGTHS
+=================================================================
+✓ Completely unsupervised — needs *no* trained model or labels.
+✓ Tiny memory footprint; only two windows needed at any moment.
+✓ Codec‑agnostic flexibility; zlib is fast in pure Python.
+✓ Rolling threshold adapts to changing background noise.
+
+=================================================================
+WEAKNESSES & CAVEATS
+=================================================================
+✗ Speed dominated by compression calls; lzma on long chunk > 1 k could be slow.
+✗ Choice of codec changes numeric value — results not comparable across codecs.
+✗ Int16 quantisation loses micro‑amplitude differences.
+✗ High‑overlap scanning multiplies runtime by 1/(1‑overlap).
+✗ Rolling MAD edge effects (first/last win_len/2 windows) less reliable.
+
+=================================================================
+IDEAS FOR FUTURE IMPROVEMENTS
+=================================================================
+• Multithread compression via `concurrent.futures.ThreadPoolExecutor`.
+• Try **zstd** (pyzstd) – faster and stronger than zlib.
+• Expose `quant_bits` CLI flag (8, 12, 16 bit) to trade accuracy vs speed.
+• Compute bidirectional NCD max( NCD(wᵢ₋₁,wᵢ), NCD(wᵢ,wᵢ₋₁) ).
+• Adaptive overlap: small hop in high‑variance segments, large otherwise.
+• JSON summary export for sweep aggregation dashboards.
+
+=================================================================
+QUICK EXAMPLE
+=================================================================
+```bash
+python run_ncd.py \
+  --npy data/stormA_wave.npy \
+  --meta data/stormA_meta.json \
+  --chunk 512 --overlap 0.9 \
+  --codec bz2 --mad_k 6 \
+  --min_dur_ms 10 --gap_ms 10
+```
+Expect window‑F1 ≈0.80‑0.85 on synthetic storm; lzma may bump +0.02 F1.
+
+─────────────────────────────────────────────────────────────────────────────
+"""
+
 
 import argparse, glob, numpy as np, matplotlib.pyplot as plt, seaborn as sns
 from pathlib import Path
