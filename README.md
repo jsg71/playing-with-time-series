@@ -2,173 +2,192 @@
 # Lightning Burst Detection with Deep Learning & Compression
 
 ## Introduction & Motivation
+**Lightning Burst Detection** is a research‑oriented time‑series project focused on detecting short “burst” events (simulated lightning strikes) within a noisy continuous signal. The repository provides everything you need to:
 
-This project provides a complete pipeline for detecting **lightning bursts** (short, high‑intensity events in a time‑series signal) using both deep‑learning models and compression‑based algorithms. The goal is to identify when a lightning strike (or similar burst event) occurs within a noisy continuous signal.
+* **Generate realistic synthetic data** that mimics real lightning bursts.
+* **Train and evaluate** three complementary detection pipelines:
+  1. **Compression‐based** Normalised Compression Distance (NCD) — zero‑training baseline.
+  2. **Autoencoder anomaly detector** — unsupervised 1‑D U‑Net.
+  3. **RawResNet1D classifier** — supervised deep learning.
 
-We explore three complementary approaches:
-
-| Approach | Learning Type | Key Script(s) | Training Needed? |
-|----------|---------------|---------------|------------------|
-| **NCD** (Normalised Compression Distance) | Heuristic / unsupervised | `run_ncd.py` | **No** |
-| **Autoencoder (AE)** | Unsupervised deep learning | `train_ae.py`, `eval_ae.py`  | Yes — trains only on noise |
-| **RawResNet1D** | Supervised deep learning | `train_resnet.py`, `eval_resnet.py` | Yes — needs labelled bursts |
-
-A synthetic‑data simulator is included so you can benchmark everything end‑to‑end without hunting for real lightning recordings.
+The code is intentionally small and pedagogical, aimed at students or engineers who want to understand time‑series burst detection end‑to‑end.
 
 ---
 
 ## Project Layout
 
+```text
+├── scripts/                 # CLI entry‑points
+│   ├── sim_make.py          # generate synthetic recording
+│   ├── train_ae.py          # modern AE training (Lightning)
+│   ├── train_ae_baseline.py # legacy AE training (raw PyTorch)
+│   ├── train_resnet.py      # supervised ResNet training
+│   ├── eval_ae.py           # AE burst detection
+│   ├── eval_ae_baseline.py  # legacy AE evaluation
+│   ├── eval_resnet.py       # ResNet evaluation
+│   └── run_ncd.py           # NCD detector (no training)
+├── leela_ml/                # core library code
+│   ├── signal_sim/          # synthetic waveform simulator
+│   ├── datamodules_npy.py   # StrikeDataset window loader
+│   ├── models/              # neural network definitions
+│   │   ├── dae_unet.py
+│   │   ├── dae_unet_baseline.py
+│   │   ├── raw_resnet.py
+│   │   └── ncd.py
+├── configs/                 # YAML hyper‑parameter files
+├── data/                    # synthetic / real waveforms live here
+├── reports/                 # metrics & plots land here
+├── notebooks/               # interactive EDA demos
+├── requirements.txt
+└── README.md                # you are here
 ```
-├── scripts/              # Command‑line entry‑points
-│   ├── sim_make.py
-│   ├── train_ae.py
-│   ├── train_ae_baseline.py
-│   ├── eval_ae.py
-│   ├── eval_ae_baseline.py
-│   ├── run_ncd.py
-│   ├── train_resnet.py
-│   └── eval_resnet.py
-├── leela_ml/             # Core library code
-│   ├── signal_sim/       # Synthetic signal generator
-│   ├── datamodules_npy.py
-│   └── models/
-│       ├── dae_unet.py
-│       ├── raw_resnet.py
-│       └── ncd.py
-├── configs/              # YAML configs for Lightning scripts
-├── data/                 # Generated data lives here
-├── reports/              # Plots & metrics
-└── requirements.txt
-```
+
+> **Dependencies:** Python ≥ 3.9, PyTorch 2 .x, PyTorch‑Lightning, NumPy, SciPy, scikit‑learn, matplotlib, seaborn.  
+> GPU optional – runs on CPU albeit slower.
 
 ---
 
-## 1  Environment (set‑up once)
+## 1 Generating Synthetic Data
+
+The simulator creates a long noisy waveform with embedded burst events.
 
 ```bash
-python -m venv .venv
-source .venv/bin/activate          # Linux / macOS
-python -m pip install -U pip
-pip install -r requirements.txt    # installs PyTorch + Lightning + utils
+python scripts/sim_make.py     --minutes 5 \            # length of recording
+    --out     data/storm5 \  # prefix for output files
+    --seed    42             # RNG seed for repeatability
 ```
 
-*Linux + NVIDIA GPU* gives the best speed; Apple M‑series works via `--device mps`.  
-CPU‑only machines are perfectly fine for small demos (just slower).
+**Outputs**
+
+| File | Purpose |
+|------|---------|
+| `storm5_<hash>.npy` | float32 waveform |
+| `storm5_<hash>.json` | meta: sample‑rate + burst timestamps |
+| `storm5_wave.npy` | *alias* copy of first channel for convenience |
+
+The metadata lists burst start times; default burst length = **40 ms**. Noise floor includes pink‑noise + sensor white‑noise; bursts carry Gaussian envelopes plus harmonics. Drift and ADC clipping simulate real hardware quirks.
 
 ---
 
-## 2  Generate Synthetic Data
+## 2 Unsupervised Pipelines
+
+### 2·1 Autoencoder (modern)
 
 ```bash
-python scripts/sim_make.py   --minutes 5   --out data/synthetic/storm5   --seed 42
+python scripts/train_ae.py   --npy    data/storm5_wave.npy   --meta   data/storm5_meta.json   --chunk  4096 --overlap 0.5   --bs     128 --epochs 20   --depth  4 --base 16   --device cuda   --ckpt   lightning_logs/ae_best.ckpt
 ```
 
-| Flag        | Meaning | Default |
-|-------------|---------|---------|
-| `--minutes` | Real‑time length of recording to simulate | `5` |
-| `--out`     | Prefix for output files | **required** |
-| `--seed`    | RNG seed for full reproducibility | `0` |
+| Flag | Meaning | Typical |
+|------|---------|---------|
+| `--chunk` | window length (samples) | 2 k – 8 k |
+| `--overlap` | data augmentation | 0.5 |
+| `--depth` | U‑Net down/up levels | 4 |
+| `--base` | filters in first conv | 16 / 32 |
+| `--noise_std` | add Gaussian noise | 0.05–0.1 |
 
-Creates:
-
-```
-data/synthetic/
- ├─ storm5_0.npy        # raw waveform (float32)
- ├─ storm5_meta.json    # {"fs": 40000, "events":[…]}
- └─ storm5_wave.npy     # alias copy of first channel
-```
-
----
-
-## 3  Unsupervised Pipelines
-
-### 3.1  Train Autoencoder (`train_ae.py`)
+**Evaluation**
 
 ```bash
-python scripts/train_ae.py   --npy   data/synthetic/storm5_wave.npy   --meta  data/synthetic/storm5_meta.json   --chunk 4096 --overlap 0.5   --bs 128 --epochs 20   --depth 4 --base 16   --ckpt lightning_logs/ae_best.ckpt
+python scripts/eval_ae.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --ckpt lightning_logs/ae_best.ckpt   --chunk 512 --overlap 0.9   --mad_k 6 --win_ms 100 --fig_dark
 ```
 
-Important parameters:
+Produces window‑ & event‑level metrics plus plots:
 
-| Flag | What it controls | Typical values |
-|------|------------------|----------------|
-| `--chunk` | Window length fed to AE | 2048 – 8192 |
-| `--overlap` | Fractional overlap between windows | 0.3 – 0.8 |
-| `--depth` / `--base` | U‑Net capacity | deeper = larger RF |
-| `--noise_std` | Extra Gaussian noise during training | 0 – 0.2 |
+* `reports/ae_error_curve.png`
+* `reports/ae_events.png`
+* `reports/ae_event_timeline.png`
 
-Output: best checkpoint + `.split.npz` with train/val/test indices.
-
-### 3.2  Detect Bursts with AE (`eval_ae.py`)
+### 2·2 Compression (NCD)
 
 ```bash
-python scripts/eval_ae.py   --npy data/synthetic/storm5_wave.npy   --meta data/synthetic/storm5_meta.json   --ckpt lightning_logs/ae_best.ckpt   --chunk 512 --overlap 0.9   --mad_k 6 --win_ms 100 --fig_dark
+python scripts/run_ncd.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --chunk 512 --overlap 0.9   --codec zlib --mad_k 6
 ```
 
-Plots appear in `reports/` and metrics in console.  
-Tune `--mad_k` to trade Precision ↔ Recall.
+No training required. Flags bursts where NCD spikes above rolling median + k × MAD.
 
-### 3.3  Compression Detector (`run_ncd.py`)
+---
+
+## 3 Supervised Pipeline (RawResNet1D)
+
+### 3·1 Training
 
 ```bash
-python scripts/run_ncd.py   --npy data/synthetic/storm5_wave.npy   --meta data/synthetic/storm5_meta.json   --chunk 512 --overlap 0.9   --codec zlib --mad_k 6
+python scripts/train_resnet.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --chunk 8192 --overlap 0.75   --bs 64 --epochs 40   --accelerator gpu --devices 1   --ckpt lightning_logs/raw_best.ckpt
 ```
 
-No training needed — baseline that works everywhere.
+*Event‑aware* split ensures windows from the same burst never leak across train/val/test.  
+Class imbalance handled by `WeightedRandomSampler`.
 
----
-
-## 4  Supervised Pipeline
-
-### 4.1  Train ResNet (`train_resnet.py`)
+### 3·2 Evaluation
 
 ```bash
-python scripts/train_resnet.py   --npy data/synthetic/storm5_wave.npy   --meta data/synthetic/storm5_meta.json   --chunk 8192 --overlap 0.75   --bs 64 --epochs 40   --ckpt lightning_logs/raw_best.ckpt
+python scripts/eval_resnet.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --chunk 8192 --ckpt lightning_logs/raw_best.ckpt   --bs 512
 ```
 
-Event‑aware `GroupShuffleSplit` keeps every lightning event in exactly one split → no leakage.
+Outputs VAL & TEST AUROC / F1 and saves `reports/resnet_val_test.png`.
 
-### 4.2  Evaluate ResNet (`eval_resnet.py`)
+---
 
-```bash
-python scripts/eval_resnet.py   --npy  data/synthetic/storm5_wave.npy   --meta data/synthetic/storm5_meta.json   --chunk 8192   --ckpt lightning_logs/raw_best.ckpt   --bs 512
+## 4 Method Comparison
+
+| Method | Training need | Typical Event‑F1 (synthetic) | Strengths | Weaknesses |
+|--------|---------------|------------------------------|-----------|------------|
+| **NCD** | none | 0.60–0.75 | zero setup, explainable | slower, many FP |
+| **Autoencoder** | unsup. noise only | 0.80–0.90 | adapts, no labels | threshold tuning |
+| **ResNet** | labelled bursts | 0.90–0.97 | highest accuracy | needs labels |
+
+---
+
+## 5 Running via Python API
+
+```python
+from leela_ml.models.dae_unet import UNet1D
+from leela_ml.datamodules_npy import StrikeDataset
+from leela_ml.ncd import ncd_adjacent
+
+ds = StrikeDataset("data/storm5_wave.npy", "data/storm5_meta.json",
+                   chunk_size=512, overlap=0.9)
+x, _ = ds[0]           # torch Tensor (1, 512)
+model = UNet1D(depth=4, base=16).eval()
+with torch.no_grad():
+    recon = model(x.unsqueeze(0))
+err = (recon - x).abs().mean()
+print("reconstruction error:", err.item())
 ```
 
-Outputs AUROC + F1 for **val** & **test**, plus a dual‑panel plot.
+You can likewise call `ncd_adjacent(ds.windows)` to get an NCD score vector.
 
 ---
 
-## 5  Method Comparison (on synthetic, default params)
+## 6 Troubleshooting
 
-| Detector | Training need | Event F1 (≈) | Strengths | Weaknesses |
-|----------|---------------|--------------|-----------|------------|
-| **NCD**  | none          | 0.65 | zero setup | sensitive to any change |
-| **AE**   | noise only    | 0.87 | unsupervised, adaptive | needs threshold tuning |
-| **ResNet** | labelled bursts | 0.95+ | highest accuracy | needs labels, training |
-
----
-
-## 6  Troubleshooting
-
-| Symptom | Fix |
-|---------|-----|
-| *CUDA device not found* | `pip install torch==x.y.z+cpu -f https://download.pytorch.org/whl/torch_stable.html` |
-| AE flags too many FP | increase `--mad_k` or retrain with lower `--noise_std` |
-| ResNet overfits | larger `--chunk`, add dropout, or more training data |
+| Issue | Fix |
+|-------|-----|
+| `CUDA device not found` | Install CPU‑only wheel: `pip install torch==<ver>+cpu` |
+| Large checkpoint rejected by GitHub | `git lfs install && git lfs track "*.pt"` |
+| Training slow | Use `--precision 16`, reduce `--depth`, smaller `--chunk` |
 
 ---
 
-## 7  Contributing
+## 7 Contributing
 
-1. Run `ruff` and `black` before committing.  
-2. Add/adjust unit tests in `tests/`.  
-3. Open an issue for big changes first.
+1. Fork & clone.  
+2. Create feature branch.  
+3. Run `ruff` + `black .`.  
+4. Add unit tests under `tests/`.  
+5. PR with clear description.
 
 ---
 
-### Future Ideas
+## 8 Future Work
 
-* Multi‑channel fusion, streaming inference, zstd codec for NCD, hyper‑param sweeps with Optuna, explainable Grad‑CAM for ResNet, etc.
- 🚀
+* Multichannel fusion (multiple sensors).  
+* Streaming (real‑time) detection.  
+* Variational / flow‑based models for richer probabilistic scoring.  
+* Hyper‑parameter sweeps via Optuna.
+
+---
+
+*Project created on macOS, validated on Ubuntu 20.04 with CUDA 11.8.  Feel free to raise issues or PRs!*  
+
 
