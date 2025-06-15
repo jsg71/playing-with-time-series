@@ -4,7 +4,7 @@
 ─────────────────────────────────────────────────────────────────────────────
  sim_make.py — Convenience wrapper around `simulate()` to create synthetic
                “field recordings” + alias file used by training / eval
- Author : <your-name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 WHAT THE SCRIPT DOES

@@ -1,7 +1,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  raw_resnet.py — 1-D Residual Network for binary classification
- Author: <your-name / date>
+ Author: jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 WHAT THIS FILE PROVIDES

@@ -1,7 +1,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  ncd.py — Fast Normalised Compression Distance (NCD) for consecutive windows
- Author : <your‑name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 PURPOSE

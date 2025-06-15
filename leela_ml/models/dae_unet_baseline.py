@@ -1,7 +1,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  UNet1D & residual Block – detailed walkthrough
- Author: (add your name / date)
+ Author: jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 What this file contains

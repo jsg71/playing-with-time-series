@@ -3,7 +3,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  eval_ae.py — Evaluate a trained Auto‑Encoder on a waveform and detect bursts
- Author : <your‑name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 BIG‑PICTURE PURPOSE

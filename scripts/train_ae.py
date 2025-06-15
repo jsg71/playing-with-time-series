@@ -2,7 +2,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  train_ae.py — Train a 1‑D U‑Net Denoising Auto‑Encoder on *noise‑only* windows
- Author : <your‑name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 WHY THIS SCRIPT?

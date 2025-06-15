@@ -3,7 +3,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  run_ncd.py — Compression‑based unsupervised lightning‑burst detector
- Author : <your‑name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 BIG‑PICTURE IDEA

@@ -15,7 +15,7 @@ python scripts/eval_ae.py \
 
 ─────────────────────────────────────────────────────────────────────────────
  eval_ae_baseline.py — Evaluate a denoising Auto‑Encoder on lightning bursts
- Author : <your-name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 WHY THIS SCRIPT?

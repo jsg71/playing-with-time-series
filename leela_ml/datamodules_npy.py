@@ -1,7 +1,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  datamodules_npy.py — windowed *.npy* datasets for PyTorch / Lightning
- Author: <your-name / date>
+ Author: jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 FILE CONTENTS

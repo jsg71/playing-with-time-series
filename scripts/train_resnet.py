@@ -4,7 +4,7 @@
 ─────────────────────────────────────────────────────────────────────────────
  train_resnet.py — Supervised training of a RawResNet1D lightning‐burst
                    classifier with event‑aware splits
- Author : <your-name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 CONTEXT & CONTRAST

@@ -3,7 +3,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  train_ae_baseline.py — Train a baseline Denoising Auto‑Encoder (U‑Net1D)
- Author : <your‑name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 GOAL

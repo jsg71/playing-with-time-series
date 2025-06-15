@@ -1,7 +1,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  dae_unet.py — 1-D Denoising U-Net (Auto-Encoder)
- Author: <your-name / date>
+ Author: jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 WHAT THIS FILE PROVIDES

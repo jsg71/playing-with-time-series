@@ -3,7 +3,7 @@
 """
 ─────────────────────────────────────────────────────────────────────────────
  eval_resnet.py — Evaluate a RawResNet1D binary lightning‑burst classifier
- Author : <your-name / date>
+ Author : jsg
 ─────────────────────────────────────────────────────────────────────────────
 
 WHAT THIS SCRIPT DOES
