@@ -1,0 +1,9 @@
+{
+  "adc":   { "fs": 100000, "bits": 14 },
+  "noise": { "mains_hz": 50, "rail_hz": 16.7 },
+  "stations": [
+    { "id": "LON", "lat": 51.50, "lon": -0.12 },
+    { "id": "PAR", "lat": 48.85, "lon":  2.35 }
+  ]
+}
+
