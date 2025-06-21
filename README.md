@@ -167,7 +167,7 @@ Outputs VAL & TEST AUROC / F1 and saves `reports/resnet_val_test.png`.
 ```python
 from leela_ml.models.dae_unet import UNet1D
 from leela_ml.datamodules_npy import StrikeDataset
-from leela_ml.ncd import ncd_adjacent
+from leela_ml.models.ncd import ncd_adjacent
 
 ds = StrikeDataset("data/storm5_wave.npy", "data/storm5_meta.json",
                    chunk_size=512, overlap=0.9)
@@ -179,7 +179,8 @@ err = (recon - x).abs().mean()
 print("reconstruction error:", err.item())
 ```
 
-You can likewise call `ncd_adjacent(ds.windows)` to get an NCD score vector.
+You can likewise call `ncd_adjacent(ds._windows.astype(np.float32, copy=False))`
+to get an NCD score vector.
 
 ---
 
