@@ -36,6 +36,8 @@ def simulate_dataset(
     seed: int = 0,
     val_frac: float = 0.1,
     test_frac: float = 0.1,
+    events_mult: float = 1.0,
+    clusters_per_minute: int = 3,
 ) -> None:
     """Generate multi-station lightning data set for GNN training.
 
@@ -55,6 +57,12 @@ def simulate_dataset(
         Fraction of events reserved for validation.
     test_frac : float, optional
         Fraction of events reserved for test.
+    events_mult : float, optional
+        Scale factor for the number of flashes in each cluster.  ``1.0`` keeps
+        the original configuration.
+    clusters_per_minute : int, optional
+        Number of event clusters per simulated minute.  More clusters yield a
+        larger training set.
     """
 
     rng = np.random.default_rng(seed)
@@ -63,9 +71,10 @@ def simulate_dataset(
     waves = {s["id"]: make_noise(rng, N, t) for s in stations}
     events = []
 
-    base_times = (
-        [5, 25, 45] if minutes == 1 else np.linspace(10, 60 * minutes - 10, 3 * minutes)
-    )
+    if minutes == 1:
+        base_times = np.linspace(5, 55, clusters_per_minute)
+    else:
+        base_times = np.linspace(10, 60 * minutes - 10, clusters_per_minute * minutes)
     cluster_cfg = [
         ("near", (20, 50), (8, 12)),
         ("mid", (100, 200), (5, 9)),
@@ -73,7 +82,7 @@ def simulate_dataset(
     ]
 
     for base_t, (name, d_rng, nf) in zip(base_times, cluster_cfg * minutes):
-        nf = rng.integers(*nf)
+        nf = int(rng.integers(*nf) * events_mult)
         base_lat = rng.uniform(49, 53)
         base_lon = rng.uniform(-2, 4)
         for _ in range(nf):

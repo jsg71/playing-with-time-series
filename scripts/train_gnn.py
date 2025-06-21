@@ -30,6 +30,10 @@ val_ds = LightningGraphDataset(args.prefix, split="val", window_ms=args.window_m
 train_dl = DataLoader(train_ds, batch_size=args.bs, shuffle=True)
 val_dl = DataLoader(val_ds, batch_size=args.bs)
 
+print(
+    f"dataset sizes -> train {len(train_ds)}, val {len(val_ds)} (batch size {args.bs})"
+)
+
 
 class Lit(pl.LightningModule):
     def __init__(self):

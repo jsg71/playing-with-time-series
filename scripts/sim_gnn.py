@@ -16,6 +16,8 @@ ap.add_argument("--fs", type=int, default=100_000)
 ap.add_argument("--seed", type=int, default=0)
 ap.add_argument("--val_frac", type=float, default=0.1)
 ap.add_argument("--test_frac", type=float, default=0.1)
+ap.add_argument("--events_mult", type=float, default=1.0)
+ap.add_argument("--clusters_per_minute", type=int, default=3)
 args = ap.parse_args()
 
 if Path(args.stations).is_file():
@@ -31,4 +33,6 @@ simulate_dataset(
     seed=args.seed,
     val_frac=args.val_frac,
     test_frac=args.test_frac,
+    events_mult=args.events_mult,
+    clusters_per_minute=args.clusters_per_minute,
 )
