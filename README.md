@@ -25,6 +25,8 @@ The code is intentionally small and pedagogical, aimed at students or engineers 
 │   ├── eval_ae.py           # AE burst detection
 │   ├── eval_ae_baseline.py  # legacy AE evaluation
 │   ├── eval_resnet.py       # ResNet evaluation
+│   ├── train_gnn.py         # GNN lightning locator training
+│   ├── eval_gnn.py          # evaluate GNN locator
 │   └── run_ncd.py           # NCD detector (no training)
 ├── leela_ml/                # core library code
 │   ├── signal_sim/          # synthetic waveform simulator
@@ -34,6 +36,7 @@ The code is intentionally small and pedagogical, aimed at students or engineers 
 │   │   ├── dae_unet_baseline.py
 │   │   ├── raw_resnet.py
 │   │   └── ncd.py
+│   ├── gnn_lightning/       # graph-based lightning locator
 ├── configs/                 # YAML hyper‑parameter files
 ├── data/                    # synthetic / real waveforms live here
 ├── reports/                 # metrics & plots land here
@@ -42,8 +45,24 @@ The code is intentionally small and pedagogical, aimed at students or engineers 
 └── README.md                # you are here
 ```
 
-> **Dependencies:** Python ≥ 3.9, PyTorch 2 .x, PyTorch‑Lightning, NumPy, SciPy, scikit‑learn, matplotlib, seaborn.  
+> **Dependencies:** Python ≥ 3.9, PyTorch 2 .x, PyTorch‑Lightning, NumPy, SciPy, scikit‑learn, matplotlib, seaborn.
 > GPU optional – runs on CPU albeit slower.
+
+## Installation
+
+Create a fresh Python environment and install the requirements.  PyTorch and
+PyTorch Geometric need to be installed separately (see the official install
+guides for CUDA/CPU wheels).
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install torch torchvision torchaudio  # pick the wheel for your system
+pip install torch_geometric
+```
+
+---
 
 ---
 
@@ -179,7 +198,30 @@ You can likewise call `ncd_adjacent(ds.windows)` to get an NCD score vector.
 
 ---
 
-## 8 Future Work
+## 8 Graph Neural Network Locator
+
+This repository now includes a proof-of-concept implementation of the graph
+neural network workflow described by Tian et al. (2025). Use
+`simulate_dataset()` under `leela_ml/gnn_lightning/` to create multi-station
+synthetic recordings. Training and evaluation are provided via
+`scripts/train_gnn.py` and `scripts/eval_gnn.py`.
+
+### Example
+
+```bash
+python scripts/sim_gnn.py --minutes 1 \
+    --out data/demo --stations data/synthetic/stations.json
+
+python scripts/train_gnn.py --prefix data/demo --epochs 10 --bs 32 \
+    --ckpt lightning_logs/gnn_best.ckpt
+
+python scripts/eval_gnn.py --prefix data/demo \
+    --ckpt lightning_logs/gnn_best.ckpt
+```
+
+---
+
+## 9 Future Work
 
 * Multichannel fusion (multiple sensors).  
 * Streaming (real‑time) detection.  
