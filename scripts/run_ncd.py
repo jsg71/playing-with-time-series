@@ -151,6 +151,9 @@ pa.add_argument("--chunk", type=int, default=512)
 pa.add_argument("--overlap", type=float, default=0.9)
 pa.add_argument("--codec", choices=["zlib", "bz2", "lzma"], default="zlib")
 pa.add_argument("--mad_k", type=float, default=3.0)
+pa.add_argument("--chunks", help="comma separated list for grid search")
+pa.add_argument("--overlaps", help="comma separated list for grid search")
+pa.add_argument("--mad_ks", help="comma separated list for grid search")
 pa.add_argument(
     "--norm", action="store_true", help="normalise each window before compression"
 )
@@ -160,39 +163,116 @@ pa.add_argument("--dpi", type=int, default=160)
 args = pa.parse_args()
 Path("reports").mkdir(exist_ok=True)
 
-# ── data ──────────────────────────────────────────────────────────────────────
-ds = StrikeDataset(args.npy, args.meta, args.chunk, args.overlap)
-win = ds._windows.astype(np.float32, copy=False)
-lab = ds.labels.astype(bool)
-hop = ds.hop
-print(
-    f"• sample_rate: {ds.fs:,.0f} Hz   windows: {len(win):,}   burst-windows (truth): {lab.sum():,}"
-)
 
-# ── NCD ───────────────────────────────────────────────────────────────────────
-err = ncd_adjacent(win, codec=args.codec, per_win_norm=args.norm)
-print(f"• NCD finished   mean={err.mean():.4f}  med={np.median(err):.4f}")
-print(f"NCD mean noise={err[~lab].mean():.3f}  burst={err[lab].mean():.3f}")
-
-# ── adaptive threshold --------------------------------------------------------
-win_len = max(1, int(args.min_dur_ms / 1000 * ds.fs / hop))
-roll = Series(err).rolling(win_len, center=True, min_periods=1)
-med = roll.median().values
-mad = roll.apply(lambda v: np.median(np.abs(v - np.median(v))), raw=True).values
-thr = med + args.mad_k * mad
-mask = err > thr
-
-# enforce min duration + close small gaps
-min_w = max(1, int(args.min_dur_ms / 1000 * ds.fs / hop))
-gap_w = max(1, int(args.gap_ms / 1000 * ds.fs / hop))
-mask = binary_dilation(mask, iterations=min_w)
-mask = binary_erosion(mask, iterations=min_w)
+def _parse_list(v: str | None, cast):
+    if not v:
+        return None
+    return [cast(x) for x in v.split(",")]
 
 
-# ── helpers -------------------------------------------------------------------
+chunk_list = _parse_list(args.chunks, int) or [args.chunk]
+overlap_list = _parse_list(args.overlaps, float) or [args.overlap]
+madk_list = _parse_list(args.mad_ks, float) or [args.mad_k]
+
+
+def evaluate(chunk: int, overlap: float, mad_k: float):
+    ds = StrikeDataset(args.npy, args.meta, chunk, overlap)
+    win = ds._windows.astype(np.float32, copy=False)
+    lab = ds.labels.astype(bool)
+    hop = ds.hop
+    err = ncd_adjacent(win, codec=args.codec, per_win_norm=args.norm)
+    win_len = max(1, int(args.min_dur_ms / 1000 * ds.fs / hop))
+    roll = Series(err).rolling(win_len, center=True, min_periods=1)
+    med = roll.median().values
+    mad = roll.apply(lambda v: np.median(np.abs(v - np.median(v))), raw=True).values
+    thr = med + mad_k * mad
+    mask = err > thr
+    min_w = max(1, int(args.min_dur_ms / 1000 * ds.fs / hop))
+    mask = binary_dilation(mask, iterations=min_w)
+    mask = binary_erosion(mask, iterations=min_w)
+
+    def runs(b):
+        out = []
+        on = False
+        for i, v in enumerate(b):
+            if v and not on:
+                on, st = True, i
+            if not v and on:
+                on = False
+                out.append((st, i - 1))
+        if on:
+            out.append((st, len(b) - 1))
+        return out
+
+    pred_evt, true_evt = runs(mask), runs(lab)
+    matched_true = [False] * len(true_evt)
+    matched_pred = [False] * len(pred_evt)
+    tp = 0
+    for i, (ps, pe) in enumerate(pred_evt):
+        for j, (ts, te) in enumerate(true_evt):
+            if not matched_true[j] and not (pe < ts or ps > te):
+                tp += 1
+                matched_true[j] = matched_pred[i] = True
+                break
+
+    P, R, F, _ = precision_recall_fscore_support(
+        lab, mask, average="binary", zero_division=0
+    )
+    try:
+        auc = roc_auc_score(lab, err)
+    except ValueError:
+        auc = float("nan")
+
+    prec_evt = tp / len(pred_evt) if pred_evt else 0
+    rec_evt = tp / len(true_evt) if true_evt else 0
+    f1_evt = 2 * prec_evt * rec_evt / (prec_evt + rec_evt + 1e-9)
+
+    return {
+        "chunk": chunk,
+        "overlap": overlap,
+        "mad_k": mad_k,
+        "win_P": P,
+        "win_R": R,
+        "win_F1": F,
+        "auc": auc,
+        "evt_P": prec_evt,
+        "evt_R": rec_evt,
+        "evt_F1": f1_evt,
+        "err": err,
+        "thr": thr,
+        "mask": mask,
+        "ds": ds,
+        "hop": hop,
+    }
+
+
+results = []
+for c in chunk_list:
+    for o in overlap_list:
+        for mk in madk_list:
+            print(f"\n### chunk={c} overlap={o} mad_k={mk}")
+            res = evaluate(c, o, mk)
+            results.append(res)
+            print(
+                f"Window P={res['win_P']:.3f} R={res['win_R']:.3f} F1={res['win_F1']:.3f} AUROC={res['auc']:.3f}"
+            )
+            print(
+                f"Event  P={res['evt_P']:.3f} R={res['evt_R']:.3f} F1={res['evt_F1']:.3f}"
+            )
+
+best = max(results, key=lambda r: r["evt_F1"])
+print("\n>>> Best", best)
+
+err = best["err"]
+thr = best["thr"]
+mask = best["mask"]
+ds = best["ds"]
+hop = best["hop"]
+pred_evt, true_evt = [], []
+
+
 def runs(b):
-    out = []
-    on = False
+    out, on = [], False
     for i, v in enumerate(b):
         if v and not on:
             on, st = True, i
@@ -204,42 +284,21 @@ def runs(b):
     return out
 
 
-pred_evt, true_evt = runs(mask), runs(lab)
-
-# match by overlap
+pred_evt, true_evt = runs(mask), runs(ds.labels.astype(bool))
 matched_true = [False] * len(true_evt)
 matched_pred = [False] * len(pred_evt)
-tp = 0
 for i, (ps, pe) in enumerate(pred_evt):
     for j, (ts, te) in enumerate(true_evt):
         if not matched_true[j] and not (pe < ts or ps > te):
-            tp += 1
             matched_true[j] = matched_pred[i] = True
             break
 
-# metrics
-P, R, F, _ = precision_recall_fscore_support(
-    lab, mask, average="binary", zero_division=0
-)
-try:
-    auc = roc_auc_score(lab, err)
-except ValueError:
-    auc = float("nan")
-
-prec_evt = tp / len(pred_evt) if pred_evt else 0
-rec_evt = tp / len(true_evt) if true_evt else 0
-f1_evt = 2 * prec_evt * rec_evt / (prec_evt + rec_evt + 1e-9)
-
-print(f"Window  P={P:.3f} R={R:.3f} F1={F:.3f}  AUROC={auc:.3f}")
-print(f"Event   P={prec_evt:.3f} R={rec_evt:.3f} F1={f1_evt:.3f}")
-
-# ── plots ---------------------------------------------------------------------
+# ── plots for best config ----------------------------------------------------
 sns.set_style("darkgrid")
 dpi = args.dpi
 fig_w = 16
 tsec = lambda w: (w * hop) / ds.fs
 
-# 1 score
 plt.figure(figsize=(fig_w, 4), dpi=dpi)
 plt.plot(err, lw=0.4, label="NCD")
 plt.plot(thr, lw=0.8, ls="--", label="thr")
@@ -248,27 +307,29 @@ plt.legend()
 plt.tight_layout()
 plt.savefig("reports/ncd_score.png", dpi=dpi)
 
-# 2 waveform + spans
 dec = max(1, int(ds.fs // 1000))
 t = np.arange(0, len(ds.wave), dec) / ds.fs
 plt.figure(figsize=(fig_w, 4), dpi=dpi)
 plt.plot(t, ds.wave[::dec], lw=0.3, color="#999")
 for i, (ps, pe) in enumerate(pred_evt):
     col = "#76FF03" if matched_pred[i] else "#F44336"
-    plt.axvspan(tsec(ps), tsec(pe) + args.chunk / ds.fs, color=col, alpha=0.15, lw=0)
+    plt.axvspan(tsec(ps), tsec(pe) + best["chunk"] / ds.fs, color=col, alpha=0.15, lw=0)
 for j, (ts, te) in enumerate(true_evt):
     if not matched_true[j]:
         plt.axvspan(
-            tsec(ts), tsec(te) + args.chunk / ds.fs, color="#FF9100", alpha=0.15, lw=0
+            tsec(ts),
+            tsec(te) + best["chunk"] / ds.fs,
+            color="#FF9100",
+            alpha=0.15,
+            lw=0,
         )
 plt.title("Waveform (green=TP lime, orange=FN, red=FP)")
 plt.xlabel("time [s]")
 plt.tight_layout()
 plt.savefig("reports/ncd_events.png", dpi=dpi)
 
-# 3 timeline
 plt.figure(figsize=(fig_w, 2), dpi=dpi)
-plt.xlim(0, tsec(len(win)))
+plt.xlim(0, tsec(len(err)))
 plt.ylim(-0.5, 1.5)
 plt.yticks([0, 1], ["Pred", "True"])
 for i, (ps, pe) in enumerate(pred_evt):
