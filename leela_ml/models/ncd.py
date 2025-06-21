@@ -112,7 +112,11 @@ def _clen(raw: bytes, codec: Codec) -> int:
 
 
 def ncd_adjacent(
-    win: np.ndarray, codec: Codec = "zlib", *, per_win_norm: bool = False
+    win: np.ndarray,
+    codec: Codec = "zlib",
+    *,
+    per_win_norm: bool = False,
+    **kwargs,
 ) -> np.ndarray:
     """NCD between each window and its predecessor.
 
@@ -125,8 +129,13 @@ def ncd_adjacent(
     per_win_norm : bool, optional
         If ``True`` each window is normalised individually (zero mean and
         scaled to utilise the 16‑bit range).  This often highlights subtle
-        shape differences between consecutive windows.
+        shape differences between consecutive windows.  ``per_win_nor`` is
+        accepted as a deprecated alias.
     """
+    if "per_win_nor" in kwargs:
+        per_win_norm = kwargs.pop("per_win_nor")
+    if kwargs:
+        raise TypeError(f"unexpected keyword arguments: {', '.join(kwargs)}")
     if win.ndim != 2:
         raise ValueError("windows must be 2-D (n_win, win_len)")
     n = len(win)

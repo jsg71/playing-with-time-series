@@ -119,8 +119,13 @@ Produces window‑ & event‑level metrics plus plots:
 ### 2·2 Compression (NCD)
 
 ```bash
-python scripts/run_ncd.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --chunk 512 --overlap 0.9   --codec zlib --mad_k 6
+python scripts/run_ncd.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json \
+    --chunk 512 --overlap 0.9   --codec zlib --mad_k 6 --norm
 ```
+
+Adding ``--norm`` normalises each window before compression which typically
+improves contrast between noise and bursts. You can also call
+``ncd_adjacent(wins, per_win_norm=True)`` from Python.
 
 No training required. Flags bursts where NCD spikes above rolling median + k × MAD.
 
