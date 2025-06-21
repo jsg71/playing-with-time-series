@@ -211,15 +211,25 @@ locations.
 ### Example
 
 ```bash
-python scripts/sim_gnn.py --minutes 1 \
+# ensure local imports resolve
+export PYTHONPATH=$PWD
+
+# generate a realistic multi-station recording (about five minutes)
+python scripts/sim_gnn.py --minutes 5 \
     --out data/demo --stations data/synthetic/stations.json
 
-python scripts/train_gnn.py --prefix data/demo --epochs 10 --bs 32 \
+# train for a good number of epochs and log the loss curve
+python scripts/train_gnn.py --prefix data/demo --epochs 50 --bs 32 \
     --ckpt lightning_logs/gnn_best.ckpt
 
+# evaluate on the held‑out test set and plot predictions
 python scripts/eval_gnn.py --prefix data/demo --split test \
     --ckpt lightning_logs/gnn_best.ckpt --plot
 ```
+
+Training writes metrics to `lightning_logs/gnn/metrics.csv` and saves the
+learning curve as `lightning_logs/gnn_training.png`.  Evaluation with
+`--plot` creates `reports/gnn_pred_vs_true_test.png`.
 
 ---
 
