@@ -118,7 +118,9 @@ def ncd_adjacent(win: np.ndarray, codec: Codec = "zlib") -> np.ndarray:
     if n < 2:
         return np.zeros(n, np.float32)
 
-    w_i16 = win.astype(np.int16, copy=False)
+    # scale to int16 range to avoid quantising everything to zero
+    scale = 32767 / max(1.0, np.max(np.abs(win)))
+    w_i16 = (win * scale).astype(np.int16, copy=False)
     clen  = [_clen(w.tobytes(), codec) for w in w_i16]
 
     out   = np.empty(n, np.float32)
