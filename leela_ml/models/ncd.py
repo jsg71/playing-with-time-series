@@ -132,8 +132,11 @@ def ncd_adjacent(
         shape differences between consecutive windows.  ``per_win_nor`` is
         accepted as a deprecated alias.
     """
+    # legacy notebooks used ``per_win_nor``; allow both names
     if "per_win_nor" in kwargs:
         per_win_norm = kwargs.pop("per_win_nor")
+    if "per_win_norm" in kwargs:
+        per_win_norm = kwargs.pop("per_win_norm")
     if kwargs:
         raise TypeError(f"unexpected keyword arguments: {', '.join(kwargs)}")
     if win.ndim != 2:
