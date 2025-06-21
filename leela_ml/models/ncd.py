@@ -1,3 +1,4 @@
+# ruff: noqa
 """
 ─────────────────────────────────────────────────────────────────────────────
  ncd.py — Fast Normalised Compression Distance (NCD) for consecutive windows
@@ -110,29 +111,47 @@ def _clen(raw: bytes, codec: Codec) -> int:
     return len(_COMP[codec](raw))
 
 
-def ncd_adjacent(win: np.ndarray, codec: Codec = "zlib") -> np.ndarray:
-    """NCD between each window and its predecessor (win must be float32 2-D)."""
+def ncd_adjacent(
+    win: np.ndarray, codec: Codec = "zlib", *, per_win_norm: bool = False
+) -> np.ndarray:
+    """NCD between each window and its predecessor.
+
+    Parameters
+    ----------
+    win : np.ndarray
+        2-D array of windows ``(n_win, win_len)`` in ``float32``.
+    codec : {"zlib", "bz2", "lzma"}
+        Which compressor to use.
+    per_win_norm : bool, optional
+        If ``True`` each window is normalised individually (zero mean and
+        scaled to utilise the 16‑bit range).  This often highlights subtle
+        shape differences between consecutive windows.
+    """
     if win.ndim != 2:
         raise ValueError("windows must be 2-D (n_win, win_len)")
     n = len(win)
     if n < 2:
         return np.zeros(n, np.float32)
 
-    # scale to int16 range to avoid quantising everything to zero
-    scale = 32767 / max(1.0, np.max(np.abs(win)))
-    w_i16 = (win * scale).astype(np.int16, copy=False)
-    clen  = [_clen(w.tobytes(), codec) for w in w_i16]
+    if per_win_norm:
+        w = win - win.mean(axis=1, keepdims=True)
+        scale = 32767 / np.maximum(1.0, np.max(np.abs(w), axis=1, keepdims=True))
+        w_i16 = (w * scale).astype(np.int16, copy=False)
+    else:
+        scale = 32767 / max(1.0, np.max(np.abs(win)))
+        w_i16 = (win * scale).astype(np.int16, copy=False)
+    clen = [_clen(w.tobytes(), codec) for w in w_i16]
 
-    out   = np.empty(n, np.float32)
-    out[0] = 0.0                      # dummy for first window
+    out = np.empty(n, np.float32)
+    out[0] = 0.0  # dummy for first window
 
     prev_b = w_i16[0].tobytes()
     prev_c = clen[0]
 
     for i in range(1, n):
-        cur_b  = w_i16[i].tobytes()
-        cur_c  = clen[i]
-        joint  = _clen(prev_b + cur_b, codec)
+        cur_b = w_i16[i].tobytes()
+        cur_c = clen[i]
+        joint = _clen(prev_b + cur_b, codec)
         out[i] = (joint - min(prev_c, cur_c)) / float(max(prev_c, cur_c))
         prev_b, prev_c = cur_b, cur_c
 
