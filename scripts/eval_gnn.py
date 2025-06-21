@@ -20,8 +20,11 @@ ds = LightningGraphDataset(args.prefix, window_ms=args.window_ms)
 dl = DataLoader(ds, batch_size=args.bs)
 
 state = torch.load(args.ckpt, map_location="cpu")
+sd = state.get("state_dict", state)
+if any(k.startswith("model.") for k in sd):
+    sd = {k.replace("model.", "", 1): v for k, v in sd.items()}
 model = LightningGNN(ds[0].x.shape[1])
-model.load_state_dict(state["state_dict"] if "state_dict" in state else state)
+model.load_state_dict(sd)
 model.eval()
 
 err = 0.0
