@@ -116,6 +116,7 @@ def ncd_adjacent(
     codec: Codec = "zlib",
     *,
     per_win_norm: bool = False,
+    per_win_nor: bool | None = None,
     **kwargs,
 ) -> np.ndarray:
     """NCD between each window and its predecessor.
@@ -129,10 +130,13 @@ def ncd_adjacent(
     per_win_norm : bool, optional
         If ``True`` each window is normalised individually (zero mean and
         scaled to utilise the 16‑bit range).  This often highlights subtle
-        shape differences between consecutive windows.  ``per_win_nor`` is
-        accepted as a deprecated alias.
+        shape differences between consecutive windows.
+    per_win_nor : bool, optional
+        Deprecated alias for :pyparamref:`per_win_norm` kept for older notebooks.
     """
     # legacy notebooks used ``per_win_nor``; allow both names
+    if per_win_nor is not None:
+        per_win_norm = per_win_nor
     if "per_win_nor" in kwargs:
         per_win_norm = kwargs.pop("per_win_nor")
     if "per_win_norm" in kwargs:
