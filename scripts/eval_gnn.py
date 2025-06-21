@@ -29,7 +29,8 @@ n = 0
 with torch.no_grad():
     for data in dl:
         out = model(data)
-        d = ((out - data.y) ** 2).sum(dim=1).sqrt() * 111.0
+        target = data.y.view(-1, 2)
+        d = ((out - target) ** 2).sum(dim=1).sqrt() * 111.0
         err += d.sum().item()
         n += d.numel()
 

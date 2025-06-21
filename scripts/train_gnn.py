@@ -40,7 +40,8 @@ class Lit(pl.LightningModule):
 
     def training_step(self, batch, _):
         out = self(batch)
-        loss = self.loss(out, batch.y)
+        target = batch.y.view(-1, 2)
+        loss = self.loss(out, target)
         self.log("train_loss", loss)
         return loss
 

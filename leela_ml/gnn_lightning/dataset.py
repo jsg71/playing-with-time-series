@@ -67,5 +67,5 @@ class LightningGraphDataset(Dataset):
             pos.append([s["lat"], s["lon"]])
         x = torch.tensor(np.stack(node_feat), dtype=torch.float32)
         pos = torch.tensor(pos, dtype=torch.float32)
-        y = torch.tensor([ev["lat"], ev["lon"]], dtype=torch.float32)
+        y = torch.tensor([[ev["lat"], ev["lon"]]], dtype=torch.float32)
         return Data(x=x, pos=pos, edge_index=self.edge_index, y=y)
