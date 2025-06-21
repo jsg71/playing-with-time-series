@@ -217,7 +217,7 @@ export PYTHONPATH=$PWD
 # generate a realistic multi-station recording (about five minutes)
 python scripts/sim_gnn.py --minutes 5 \
     --out data/demo --stations data/synthetic/stations.json \
-    --events_mult 3 --clusters_per_minute 5
+    --events_mult 5 --clusters_per_minute 6
 
 # train for a good number of epochs and log the loss curve
 python scripts/train_gnn.py --prefix data/demo --epochs 50 --bs 32 \

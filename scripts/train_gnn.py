@@ -19,7 +19,7 @@ ap = argparse.ArgumentParser()
 ap.add_argument("--prefix", required=True, help="dataset file prefix")
 ap.add_argument("--window_ms", type=float, default=2.0)
 ap.add_argument("--bs", type=int, default=32)
-ap.add_argument("--epochs", type=int, default=20)
+ap.add_argument("--epochs", type=int, default=50)
 ap.add_argument("--ckpt", default="lightning_logs/gnn_best.ckpt")
 args = ap.parse_args()
 log_dir = Path(args.ckpt).parent
@@ -38,7 +38,9 @@ print(
 class Lit(pl.LightningModule):
     def __init__(self):
         super().__init__()
-        self.model = LightningGNN(train_ds[0].x.shape[1])
+        # the GNN does not need to know the window length as it embeds each
+        # waveform via the ``NodeEncoder`` defined in ``model.py``
+        self.model = LightningGNN()
         self.loss = torch.nn.MSELoss()
 
     def forward(self, data):

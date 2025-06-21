@@ -36,8 +36,8 @@ def simulate_dataset(
     seed: int = 0,
     val_frac: float = 0.1,
     test_frac: float = 0.1,
-    events_mult: float = 1.0,
-    clusters_per_minute: int = 3,
+    events_mult: float = 5.0,
+    clusters_per_minute: int = 6,
 ) -> None:
     """Generate multi-station lightning data set for GNN training.
 
@@ -58,8 +58,8 @@ def simulate_dataset(
     test_frac : float, optional
         Fraction of events reserved for test.
     events_mult : float, optional
-        Scale factor for the number of flashes in each cluster.  ``1.0`` keeps
-        the original configuration.
+        Scale factor for the number of flashes in each cluster.  Values greater
+        than one yield denser storms.  Default ``5.0``.
     clusters_per_minute : int, optional
         Number of event clusters per simulated minute.  More clusters yield a
         larger training set.
