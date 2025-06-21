@@ -34,8 +34,28 @@ def simulate_dataset(
     stations: List[Dict[str, float]],
     fs: int = 100_000,
     seed: int = 0,
+    val_frac: float = 0.1,
+    test_frac: float = 0.1,
 ) -> None:
-    """Generate multi-station lightning data set for GNN training."""
+    """Generate multi-station lightning data set for GNN training.
+
+    Parameters
+    ----------
+    minutes : int
+        Length of simulation.
+    out_prefix : str
+        Path prefix for generated files.
+    stations : list of dict
+        Station locations with ``id``, ``lat`` and ``lon``.
+    fs : int, optional
+        Sample rate (Hz).  Default ``100_000``.
+    seed : int, optional
+        RNG seed for repeatability.
+    val_frac : float, optional
+        Fraction of events reserved for validation.
+    test_frac : float, optional
+        Fraction of events reserved for test.
+    """
 
     rng = np.random.default_rng(seed)
     N = fs * 60 * minutes
@@ -94,11 +114,29 @@ def simulate_dataset(
     Path(out_prefix).parent.mkdir(parents=True, exist_ok=True)
     for s in stations:
         np.save(f"{out_prefix}_{s['id']}.npy", waves[s["id"]])
+
     meta = dict(
         fs=fs,
         utc_start=datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
         stations=stations,
         events=events,
     )
+
+    # deterministic split of events for reproducible experiments -----------------
+    idx = np.arange(len(events))
+    rng.shuffle(idx)
+    n_val = int(len(idx) * val_frac)
+    n_test = int(len(idx) * test_frac)
+    splits = {
+        "val": idx[:n_val].tolist(),
+        "test": idx[n_val : n_val + n_test].tolist(),
+        "train": idx[n_val + n_test :].tolist(),
+    }
+
     json.dump(meta, open(f"{out_prefix}_meta.json", "w"), indent=2)
-    print(f"Saved {len(events)} flashes \u2192 {out_prefix}_*.npy")
+    json.dump(splits, open(f"{out_prefix}_splits.json", "w"), indent=2)
+
+    print(
+        f"Saved {len(events)} flashes → {out_prefix}_*.npy (train/val/test = "
+        f"{len(splits['train'])}/{len(splits['val'])}/{len(splits['test'])})"
+    )

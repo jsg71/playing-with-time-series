@@ -14,6 +14,8 @@ ap.add_argument(
 )
 ap.add_argument("--fs", type=int, default=100_000)
 ap.add_argument("--seed", type=int, default=0)
+ap.add_argument("--val_frac", type=float, default=0.1)
+ap.add_argument("--test_frac", type=float, default=0.1)
 args = ap.parse_args()
 
 if Path(args.stations).is_file():
@@ -21,4 +23,12 @@ if Path(args.stations).is_file():
 else:
     stations = json.loads(args.stations)
 
-simulate_dataset(args.minutes, args.out, stations, fs=args.fs, seed=args.seed)
+simulate_dataset(
+    args.minutes,
+    args.out,
+    stations,
+    fs=args.fs,
+    seed=args.seed,
+    val_frac=args.val_frac,
+    test_frac=args.test_frac,
+)

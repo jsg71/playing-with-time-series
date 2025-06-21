@@ -22,9 +22,23 @@ def hav_km(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
 
 
 class LightningGraphDataset(Dataset):
-    """Event-centric graphs from multi-station waveforms."""
+    """Event-centric graphs from multi-station waveforms.
 
-    def __init__(self, prefix: str, window_ms: float = 2.0, ds: int = 16) -> None:
+    Parameters
+    ----------
+    prefix : str
+        File prefix of the dataset.
+    window_ms : float
+        Graph window length in milliseconds.
+    ds : int
+        Temporal down-sample factor for node features.
+    split : str
+        ``"train"``, ``"val"`` or ``"test"``.  Defaults to ``"train"``.
+    """
+
+    def __init__(
+        self, prefix: str, window_ms: float = 2.0, ds: int = 16, split: str = "train"
+    ) -> None:
         self.prefix = prefix
         meta_path = Path(f"{prefix}_meta.json")
         self.meta = json.load(open(meta_path))
@@ -37,15 +51,20 @@ class LightningGraphDataset(Dataset):
             for s in self.meta["stations"]
         }
         self.events = self.meta["events"]
+        splits_path = Path(f"{prefix}_splits.json")
+        if splits_path.is_file() and split in {"train", "val", "test"}:
+            self.indices = json.load(open(splits_path))[split]
+        else:
+            self.indices = list(range(len(self.events)))
         n = len(self.meta["stations"])
         src, dst = zip(*[(i, j) for i in range(n) for j in range(n) if i != j])
         self.edge_index = torch.tensor([src, dst], dtype=torch.long)
 
     def __len__(self) -> int:
-        return len(self.events)
+        return len(self.indices)
 
     def __getitem__(self, idx: int) -> Data:
-        ev = self.events[idx]
+        ev = self.events[self.indices[idx]]
         node_feat: List[np.ndarray] = []
         pos: List[List[float]] = []
         for s in self.meta["stations"]:

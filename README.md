@@ -201,10 +201,12 @@ You can likewise call `ncd_adjacent(ds.windows)` to get an NCD score vector.
 ## 8 Graph Neural Network Locator
 
 This repository now includes a proof-of-concept implementation of the graph
-neural network workflow described by Tian et al. (2025). Use
+neural network workflow described by Tian et al. (2025). The simulator now
+splits events into **train/val/test** subsets to avoid data leakage. Use
 `simulate_dataset()` under `leela_ml/gnn_lightning/` to create multi-station
-synthetic recordings. Training and evaluation are provided via
-`scripts/train_gnn.py` and `scripts/eval_gnn.py`.
+recordings. Training logs losses to CSV and writes a `gnn_training.png` curve.
+Evaluation reports the mean location error and can plot predicted vs true
+locations.
 
 ### Example
 
@@ -215,8 +217,8 @@ python scripts/sim_gnn.py --minutes 1 \
 python scripts/train_gnn.py --prefix data/demo --epochs 10 --bs 32 \
     --ckpt lightning_logs/gnn_best.ckpt
 
-python scripts/eval_gnn.py --prefix data/demo \
-    --ckpt lightning_logs/gnn_best.ckpt
+python scripts/eval_gnn.py --prefix data/demo --split test \
+    --ckpt lightning_logs/gnn_best.ckpt --plot
 ```
 
 ---
