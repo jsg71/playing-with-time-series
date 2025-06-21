@@ -21,17 +21,23 @@ ap.add_argument("--window_ms", type=float, default=2.0)
 ap.add_argument("--bs", type=int, default=32)
 ap.add_argument("--epochs", type=int, default=50)
 ap.add_argument("--ckpt", default="lightning_logs/gnn_best.ckpt")
+ap.add_argument("--no_denoise", action="store_true", help="disable band-pass denoising")
 args = ap.parse_args()
 log_dir = Path(args.ckpt).parent
 log_dir.mkdir(parents=True, exist_ok=True)
 
-train_ds = LightningGraphDataset(args.prefix, split="train", window_ms=args.window_ms)
-val_ds = LightningGraphDataset(args.prefix, split="val", window_ms=args.window_ms)
+train_ds = LightningGraphDataset(
+    args.prefix, split="train", window_ms=args.window_ms, denoise=not args.no_denoise
+)
+val_ds = LightningGraphDataset(
+    args.prefix, split="val", window_ms=args.window_ms, denoise=not args.no_denoise
+)
 train_dl = DataLoader(train_ds, batch_size=args.bs, shuffle=True)
 val_dl = DataLoader(val_ds, batch_size=args.bs)
 
 print(
     f"dataset sizes -> train {len(train_ds)}, val {len(val_ds)} (batch size {args.bs})"
+    f" | denoise={'on' if not args.no_denoise else 'off'}"
 )
 
 

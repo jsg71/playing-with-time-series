@@ -16,9 +16,12 @@ ap.add_argument("--window_ms", type=float, default=2.0)
 ap.add_argument("--bs", type=int, default=32)
 ap.add_argument("--split", default="test", choices=["train", "val", "test"])
 ap.add_argument("--plot", action="store_true")
+ap.add_argument("--no_denoise", action="store_true", help="disable band-pass denoising")
 args = ap.parse_args()
 
-ds = LightningGraphDataset(args.prefix, split=args.split, window_ms=args.window_ms)
+ds = LightningGraphDataset(
+    args.prefix, split=args.split, window_ms=args.window_ms, denoise=not args.no_denoise
+)
 dl = DataLoader(ds, batch_size=args.bs)
 
 state = torch.load(args.ckpt, map_location="cpu")

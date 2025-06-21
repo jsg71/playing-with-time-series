@@ -8,6 +8,8 @@ import torch
 from torch.utils.data import Dataset
 from torch_geometric.data import Data
 
+from .preprocess import bandpass_filter
+
 C = 3.0e5  # km/s ground wave
 
 
@@ -34,10 +36,18 @@ class LightningGraphDataset(Dataset):
         Temporal down-sample factor for node features.
     split : str
         ``"train"``, ``"val"`` or ``"test"``.  Defaults to ``"train"``.
+    denoise : bool
+        Apply a light band-pass filter to each waveform segment.  Mirrors the
+        denoising step described by Tian et al.  Default ``True``.
     """
 
     def __init__(
-        self, prefix: str, window_ms: float = 2.0, ds: int = 16, split: str = "train"
+        self,
+        prefix: str,
+        window_ms: float = 2.0,
+        ds: int = 16,
+        split: str = "train",
+        denoise: bool = True,
     ) -> None:
         self.prefix = prefix
         meta_path = Path(f"{prefix}_meta.json")
@@ -46,6 +56,7 @@ class LightningGraphDataset(Dataset):
         self.window = int(window_ms * self.fs / 1000)
         self.ds = int(ds)
         self.half = self.window // 2
+        self.denoise = bool(denoise)
         self.waves = {
             s["id"]: np.load(f"{prefix}_{s['id']}.npy", mmap_mode="r")
             for s in self.meta["stations"]
@@ -80,6 +91,8 @@ class LightningGraphDataset(Dataset):
             else:
                 arr = w[start:end]
             arr = arr.astype("f4")
+            if self.denoise:
+                arr = bandpass_filter(arr, self.fs)
             if self.ds > 1:
                 arr = arr[: len(arr) // self.ds * self.ds].reshape(-1, self.ds).mean(1)
             node_feat.append(arr)

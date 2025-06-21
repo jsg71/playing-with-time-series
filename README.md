@@ -223,6 +223,8 @@ python scripts/sim_gnn.py --minutes 5 \
 python scripts/train_gnn.py --prefix data/demo --epochs 50 --bs 32 \
     --ckpt lightning_logs/gnn_best.ckpt
 
+# disable denoising with `--no_denoise` if you want to train on raw snippets
+
 # evaluate on the held‑out test set and plot predictions
 python scripts/eval_gnn.py --prefix data/demo --split test \
     --ckpt lightning_logs/gnn_best.ckpt --plot

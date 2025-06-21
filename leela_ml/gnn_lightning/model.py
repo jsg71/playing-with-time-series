@@ -16,15 +16,19 @@ class NodeEncoder(nn.Module):
 
     def __init__(self, out_channels: int = 64) -> None:
         super().__init__()
+        # three layers of strided convolution followed by global pooling
         self.conv1 = nn.Conv1d(1, 16, kernel_size=7, stride=2, padding=3)
         self.conv2 = nn.Conv1d(16, 32, kernel_size=5, stride=2, padding=2)
         self.conv3 = nn.Conv1d(32, out_channels, kernel_size=5, stride=2, padding=2)
         self.pool = nn.AdaptiveAvgPool1d(1)
+        # slight dropout to help generalisation
+        self.dropout = nn.Dropout(0.1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         x = F.relu(self.conv1(x))
         x = F.relu(self.conv2(x))
         x = F.relu(self.conv3(x))
+        x = self.dropout(x)
         x = self.pool(x)
         return x.squeeze(-1)
 
