@@ -28,7 +28,8 @@ NCD(A,B) = ( C(A+B) − min( C(A), C(B) ) ) / max( C(A), C(B) )
 SCRIPT WORKFLOW
 =================================================================
 1. **StrikeDataset** loads waveform → sliding windows.
-2. Compute NCD for each window vs its predecessor (`ncd_adjacent`).
+2. Compute NCD for each window vs its predecessor (`ncd_adjacent`)
+   or against a fixed baseline window (`ncd_first`).
 3. Adaptive threshold = rolling median + *k*×MAD.
 4. Morphological ops clean flicker; windows above threshold = *burst mask*.
 5. Merge + prune mask into **events** and compute metrics.
@@ -148,7 +149,7 @@ from sklearn.metrics import (
 import json
 
 from leela_ml.datamodules_npy import StrikeDataset
-from leela_ml.ncd import ncd_adjacent
+from leela_ml.ncd import ncd_adjacent, ncd_first
 
 # ── CLI ───────────────────────────────────────────────────────────────────────
 pa = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
@@ -171,6 +172,12 @@ pa.add_argument(
     default=0,
     help="apply numpy.diff before compression",
 )
+pa.add_argument(
+    "--baseline_idx",
+    type=int,
+    default=None,
+    help="if set, compute NCD against this window index instead of adjacent",
+)
 pa.add_argument("--dpi", type=int, default=160)
 args = pa.parse_args()
 Path("reports").mkdir(exist_ok=True)
@@ -189,12 +196,21 @@ print(
 )
 
 # ── NCD ───────────────────────────────────────────────────────────────────────
-err = ncd_adjacent(
-    win,
-    codec=args.codec,
-    per_win_norm=args.per_win_norm,
-    diff_order=args.diff_order,
-)
+if args.baseline_idx is None:
+    err = ncd_adjacent(
+        win,
+        codec=args.codec,
+        per_win_norm=args.per_win_norm,
+        diff_order=args.diff_order,
+    )
+else:
+    err = ncd_first(
+        win,
+        codec=args.codec,
+        per_win_norm=args.per_win_norm,
+        diff_order=args.diff_order,
+        baseline_idx=args.baseline_idx,
+    )
 print(f"• NCD finished   mean={err.mean():.4f}  med={np.median(err):.4f}")
 
 # ── adaptive threshold --------------------------------------------------------

@@ -8,4 +8,5 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 ncd_adjacent = _mod.ncd_adjacent
-__all__ = ['ncd_adjacent']
+ncd_first = _mod.ncd_first
+__all__ = ['ncd_adjacent', 'ncd_first']

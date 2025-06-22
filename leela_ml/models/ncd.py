@@ -166,3 +166,56 @@ def ncd_adjacent(
 
     out[0] = out[1]
     return out
+
+
+def ncd_first(
+    win: np.ndarray,
+    codec: Codec = "zlib",
+    *,
+    per_win_norm: bool = False,
+    diff_order: int = 0,
+    baseline_idx: int = 0,
+) -> np.ndarray:
+    """NCD between each window and a fixed baseline window.
+
+    Parameters
+    ----------
+    win : numpy.ndarray, shape (n_win, win_len), dtype float32
+        Consecutive windows of the signal.
+    codec : {'zlib','bz2','lzma'}, default 'zlib'
+        Compressor to use.
+    per_win_norm : bool, default False
+        Normalise each window by its peak amplitude before compression.
+    diff_order : int, default 0
+        Apply ``numpy.diff`` of this order before compression.
+    baseline_idx : int, default 0
+        Index of the reference window used for all comparisons.
+    """
+    if win.ndim != 2:
+        raise ValueError("windows must be 2-D (n_win, win_len)")
+    n = len(win)
+    if not (0 <= baseline_idx < n):
+        raise ValueError("baseline_idx out of range")
+
+    arr = win.astype(np.float32, copy=False)
+    if diff_order > 0:
+        arr = np.diff(arr, n=diff_order, axis=1)
+    if per_win_norm:
+        arr = arr - arr.mean(axis=1, keepdims=True)
+        peak = np.abs(arr).max(axis=1, keepdims=True)
+        arr = np.divide(arr, peak + 1e-9, out=arr)
+
+    w_i16 = np.round(arr * 32767).astype(np.int16, copy=False)
+    clen = [_clen(w.tobytes(), codec) for w in w_i16]
+
+    base_b = w_i16[baseline_idx].tobytes()
+    base_c = clen[baseline_idx]
+
+    out = np.empty(n, np.float32)
+    for i in range(n):
+        cur_b = w_i16[i].tobytes()
+        cur_c = clen[i]
+        joint = _clen(base_b + cur_b, codec)
+        out[i] = (joint - min(base_c, cur_c)) / float(max(base_c, cur_c))
+
+    return out
