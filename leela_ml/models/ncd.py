@@ -118,6 +118,7 @@ def ncd_adjacent(
     *,
     per_win_norm: bool = False,
     diff_order: int = 0,
+    **kwargs,
 ) -> np.ndarray:
     """NCD between each window and its predecessor.
 
@@ -134,7 +135,14 @@ def ncd_adjacent(
         Apply ``numpy.diff`` of this order along the time axis before
         compression. Using a first difference can emphasise burst
         onsets while reducing baseline drift.
+    **kwargs : Any
+        Extra keyword arguments are ignored for backward compatibility.
     """
+    if "per_win_nor" in kwargs:
+        per_win_norm = kwargs.pop("per_win_nor")
+    if kwargs:
+        import warnings
+        warnings.warn(f"ignoring unknown kwargs: {list(kwargs)}", RuntimeWarning)
     if win.ndim != 2:
         raise ValueError("windows must be 2-D (n_win, win_len)")
     n = len(win)
@@ -175,6 +183,7 @@ def ncd_first(
     per_win_norm: bool = False,
     diff_order: int = 0,
     baseline_idx: int = 0,
+    **kwargs,
 ) -> np.ndarray:
     """NCD between each window and a fixed baseline window.
 
@@ -190,7 +199,14 @@ def ncd_first(
         Apply ``numpy.diff`` of this order before compression.
     baseline_idx : int, default 0
         Index of the reference window used for all comparisons.
+    **kwargs : Any
+        Extra keyword arguments are ignored for backward compatibility.
     """
+    if "per_win_nor" in kwargs:
+        per_win_norm = kwargs.pop("per_win_nor")
+    if kwargs:
+        import warnings
+        warnings.warn(f"ignoring unknown kwargs: {list(kwargs)}", RuntimeWarning)
     if win.ndim != 2:
         raise ValueError("windows must be 2-D (n_win, win_len)")
     n = len(win)
