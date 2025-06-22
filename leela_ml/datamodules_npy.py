@@ -127,8 +127,14 @@ noise_dl = DataLoader(noise_ds, batch_size=64, shuffle=True)
 
 
 from pathlib import Path
-import json, numpy as np, torch
-from torch.utils.data import Dataset
+import json, numpy as np
+try:
+    import torch
+    from torch.utils.data import Dataset
+except ModuleNotFoundError:  # allow torch-less usage
+    torch = None
+    class Dataset:
+        pass
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -191,9 +197,13 @@ class StrikeDataset(Dataset):
 
     def __getitem__(self, idx: int):
         x = self._windows[idx]          # numpy view, shape (chunk_size,)
+        if torch is None:
+            return x.reshape(1, -1).astype(np.float32), np.float32(self.labels[idx])
         # add channel-dim → (1,T)  ;  convert to torch.float32
-        return (torch.from_numpy(x).unsqueeze(0),
-                torch.tensor(float(self.labels[idx])))
+        return (
+            torch.from_numpy(x).unsqueeze(0),
+            torch.tensor(float(self.labels[idx])),
+        )
 
 
 # ── helper view that exposes only noise windows (label == 0) ------------------

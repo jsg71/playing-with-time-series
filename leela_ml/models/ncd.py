@@ -110,27 +110,49 @@ def _clen(raw: bytes, codec: Codec) -> int:
     return len(_COMP[codec](raw))
 
 
-def ncd_adjacent(win: np.ndarray, codec: Codec = "zlib") -> np.ndarray:
-    """NCD between each window and its predecessor (win must be float32 2-D)."""
+def ncd_adjacent(
+    win: np.ndarray,
+    codec: Codec = "zlib",
+    *,
+    per_win_norm: bool = False,
+) -> np.ndarray:
+    """NCD between each window and its predecessor.
+
+    Parameters
+    ----------
+    win : numpy.ndarray, shape (n_win, win_len), dtype float32
+        Consecutive windows to compare.
+    codec : {'zlib','bz2','lzma'}, default 'zlib'
+        Compressor to use.
+    per_win_norm : bool, default False
+        If ``True`` each window is normalised by its peak amplitude before
+        compression which removes per-window scaling differences.
+    """
     if win.ndim != 2:
         raise ValueError("windows must be 2-D (n_win, win_len)")
     n = len(win)
     if n < 2:
         return np.zeros(n, np.float32)
 
-    w_i16 = win.astype(np.int16, copy=False)
-    clen  = [_clen(w.tobytes(), codec) for w in w_i16]
+    if per_win_norm:
+        w = win - win.mean(axis=1, keepdims=True)
+        peak = np.abs(w).max(axis=1, keepdims=True)
+        w = np.divide(w, peak + 1e-9, out=w)
+        w_i16 = np.round(w * 32767).astype(np.int16, copy=False)
+    else:
+        w_i16 = win.astype(np.int16, copy=False)
+    clen = [_clen(w.tobytes(), codec) for w in w_i16]
 
-    out   = np.empty(n, np.float32)
-    out[0] = 0.0                      # dummy for first window
+    out = np.empty(n, np.float32)
+    out[0] = 0.0  # dummy for first window
 
     prev_b = w_i16[0].tobytes()
     prev_c = clen[0]
 
     for i in range(1, n):
-        cur_b  = w_i16[i].tobytes()
-        cur_c  = clen[i]
-        joint  = _clen(prev_b + cur_b, codec)
+        cur_b = w_i16[i].tobytes()
+        cur_c = clen[i]
+        joint = _clen(prev_b + cur_b, codec)
         out[i] = (joint - min(prev_c, cur_c)) / float(max(prev_c, cur_c))
         prev_b, prev_c = cur_b, cur_c
 

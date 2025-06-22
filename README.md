@@ -100,7 +100,7 @@ Produces window‑ & event‑level metrics plus plots:
 ### 2·2 Compression (NCD)
 
 ```bash
-python scripts/run_ncd.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --chunk 512 --overlap 0.9   --codec zlib --mad_k 6
+python scripts/run_ncd.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --chunk 512 --overlap 0.9   --codec zlib --mad_k 6 --per_win_norm
 ```
 
 No training required. Flags bursts where NCD spikes above rolling median + k × MAD.
@@ -143,7 +143,7 @@ Outputs VAL & TEST AUROC / F1 and saves `reports/resnet_val_test.png`.
 ```python
 from leela_ml.models.dae_unet import UNet1D
 from leela_ml.datamodules_npy import StrikeDataset
-from leela_ml.ncd import ncd_adjacent
+from leela_ml.models.ncd import ncd_adjacent
 
 ds = StrikeDataset("data/storm5_wave.npy", "data/storm5_meta.json",
                    chunk_size=512, overlap=0.9)
@@ -155,7 +155,8 @@ err = (recon - x).abs().mean()
 print("reconstruction error:", err.item())
 ```
 
-You can likewise call `ncd_adjacent(ds.windows)` to get an NCD score vector.
+You can likewise call `ncd_adjacent(ds.windows, per_win_norm=True)` to obtain
+an NCD score vector that is invariant to per-window scale.
 
 ---
 
