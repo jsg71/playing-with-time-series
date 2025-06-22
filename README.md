@@ -145,7 +145,8 @@ Outputs VAL & TEST AUROC / F1 and saves `reports/resnet_val_test.png`.
 ```python
 from leela_ml.models.dae_unet import UNet1D
 from leela_ml.datamodules_npy import StrikeDataset
-from leela_ml.models.ncd import ncd_adjacent
+# lightweight wrapper avoids importing torch
+from leela_ml.ncd import ncd_adjacent
 
 ds = StrikeDataset("data/storm5_wave.npy", "data/storm5_meta.json",
                    chunk_size=512, overlap=0.9)
