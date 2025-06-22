@@ -2,3 +2,5 @@
 __pycache__/
 *.ipynb_checkpoints/
 .git_backup_*/
+notebooks/data/*/*.npy
+notebooks/data/*/*_meta.json
