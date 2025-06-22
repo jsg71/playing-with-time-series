@@ -67,6 +67,8 @@ python scripts/sim_make.py     --minutes 5 \            # length of recording
 
 The metadata lists burst start times; default burst length = **40 ms**. Noise floor includes pink‑noise + sensor white‑noise; bursts carry Gaussian envelopes plus harmonics. Drift and ADC clipping simulate real hardware quirks.
 
+During training or evaluation the continuous waveform is cut into fixed-size windows. A window receives a **positive label** if *any* portion overlaps the 40 ms burst span; otherwise it is labelled 0. High overlap values therefore mark several consecutive windows around each strike.
+
 ---
 
 ## 2 Unsupervised Pipelines
