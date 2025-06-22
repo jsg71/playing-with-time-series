@@ -166,8 +166,12 @@ ds = StrikeDataset(args.npy, args.meta, args.chunk, args.overlap)
 win = ds._windows.astype(np.float32, copy=False)
 lab = ds.labels.astype(bool)
 hop = ds.hop
+dur_sec = len(ds.wave) / ds.fs
 print(
     f"• sample_rate: {ds.fs:,.0f} Hz   windows: {len(win):,}   burst-windows (truth): {lab.sum():,}"
+)
+print(
+    f"• window_size: {args.chunk} samp  hop: {hop} ({hop/ds.fs*1e3:.1f} ms)  duration: {dur_sec:.1f} s"
 )
 
 # ── NCD ───────────────────────────────────────────────────────────────────────
@@ -229,9 +233,18 @@ except ValueError:
 prec_evt = tp / len(pred_evt) if pred_evt else 0
 rec_evt = tp / len(true_evt) if true_evt else 0
 f1_evt = 2 * prec_evt * rec_evt / (prec_evt + rec_evt + 1e-9)
+tp_evt = tp
+fp_evt = len(pred_evt) - tp
+fn_evt = len(true_evt) - tp
+
+from sklearn.metrics import confusion_matrix
+tn, fp_win, fn_win, tp_win = confusion_matrix(lab, mask).ravel()
 
 print(f"Window  P={P:.3f} R={R:.3f} F1={F:.3f}  AUROC={auc:.3f}")
-print(f"Event   P={prec_evt:.3f} R={rec_evt:.3f} F1={f1_evt:.3f}")
+print(f"         TP={tp_win:,} FP={fp_win:,} FN={fn_win:,} TN={tn:,}")
+print(
+    f"Event   P={prec_evt:.3f} R={rec_evt:.3f} F1={f1_evt:.3f}  (TP={tp_evt:,} FP={fp_evt:,} FN={fn_evt:,})"
+)
 
 # ── plots ---------------------------------------------------------------------
 sns.set_style("darkgrid")
@@ -282,6 +295,39 @@ plt.xlabel("time [s]")
 plt.tight_layout()
 plt.savefig("reports/ncd_pred_timeline.png", dpi=dpi)
 
+# 4 histogram of scores
+plt.figure(figsize=(fig_w,4), dpi=dpi)
+sns.histplot(err[~lab], bins=100, color="skyblue", stat="density", label="noise", kde=True)
+if lab.any():
+    sns.histplot(err[lab], bins=100, color="orange", stat="density", label="burst", kde=True, alpha=0.7)
+plt.title("NCD distribution")
+plt.xlabel("score")
+plt.ylabel("density")
+plt.legend()
+plt.tight_layout()
+plt.savefig("reports/ncd_hist.png", dpi=dpi)
+
 print(
-    "✓ clearer plots written → ncd_score.png / ncd_events.png / ncd_pred_timeline.png"
+    "✓ clearer plots written → ncd_score.png / ncd_events.png / ncd_pred_timeline.png / ncd_hist.png"
 )
+
+# save metrics json
+import json
+metrics = {
+    "window_P": float(P),
+    "window_R": float(R),
+    "window_F1": float(F),
+    "window_TP": int(tp_win),
+    "window_FP": int(fp_win),
+    "window_FN": int(fn_win),
+    "window_TN": int(tn),
+    "event_P": float(prec_evt),
+    "event_R": float(rec_evt),
+    "event_F1": float(f1_evt),
+    "event_TP": int(tp_evt),
+    "event_FP": int(fp_evt),
+    "event_FN": int(fn_evt),
+    "auroc": float(auc),
+}
+with open("reports/ncd_metrics.json", "w") as fh:
+    json.dump(metrics, fh, indent=2)
