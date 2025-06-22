@@ -132,12 +132,20 @@ Expect window‑F1 ≈0.80‑0.85 on synthetic storm; lzma may bump +0.02 F1.
 """
 
 
-import argparse, glob, numpy as np, matplotlib.pyplot as plt, seaborn as sns
+import argparse
 from pathlib import Path
+
+import matplotlib.pyplot as plt
+import numpy as np
+import seaborn as sns
 from pandas import Series
-from tqdm import tqdm
 from scipy.ndimage import binary_dilation, binary_erosion
-from sklearn.metrics import precision_recall_fscore_support, roc_auc_score
+from sklearn.metrics import (
+    confusion_matrix,
+    precision_recall_fscore_support,
+    roc_auc_score,
+)
+import json
 
 from leela_ml.datamodules_npy import StrikeDataset
 from leela_ml.ncd import ncd_adjacent
@@ -157,6 +165,12 @@ pa.add_argument(
     action="store_true",
     help="normalise each window before compression",
 )
+pa.add_argument(
+    "--diff_order",
+    type=int,
+    default=0,
+    help="apply numpy.diff before compression",
+)
 pa.add_argument("--dpi", type=int, default=160)
 args = pa.parse_args()
 Path("reports").mkdir(exist_ok=True)
@@ -175,7 +189,12 @@ print(
 )
 
 # ── NCD ───────────────────────────────────────────────────────────────────────
-err = ncd_adjacent(win, codec=args.codec, per_win_norm=args.per_win_norm)
+err = ncd_adjacent(
+    win,
+    codec=args.codec,
+    per_win_norm=args.per_win_norm,
+    diff_order=args.diff_order,
+)
 print(f"• NCD finished   mean={err.mean():.4f}  med={np.median(err):.4f}")
 
 # ── adaptive threshold --------------------------------------------------------
@@ -237,7 +256,6 @@ tp_evt = tp
 fp_evt = len(pred_evt) - tp
 fn_evt = len(true_evt) - tp
 
-from sklearn.metrics import confusion_matrix
 tn, fp_win, fn_win, tp_win = confusion_matrix(lab, mask).ravel()
 
 print(f"Window  P={P:.3f} R={R:.3f} F1={F:.3f}  AUROC={auc:.3f}")
@@ -250,7 +268,11 @@ print(
 sns.set_style("darkgrid")
 dpi = args.dpi
 fig_w = 16
-tsec = lambda w: (w * hop) / ds.fs
+
+
+def tsec(w: int) -> float:
+    return (w * hop) / ds.fs
+
 
 # 1 score
 plt.figure(figsize=(fig_w, 4), dpi=dpi)
@@ -296,10 +318,20 @@ plt.tight_layout()
 plt.savefig("reports/ncd_pred_timeline.png", dpi=dpi)
 
 # 4 histogram of scores
-plt.figure(figsize=(fig_w,4), dpi=dpi)
-sns.histplot(err[~lab], bins=100, color="skyblue", stat="density", label="noise", kde=True)
+plt.figure(figsize=(fig_w, 4), dpi=dpi)
+sns.histplot(
+    err[~lab], bins=100, color="skyblue", stat="density", label="noise", kde=True
+)
 if lab.any():
-    sns.histplot(err[lab], bins=100, color="orange", stat="density", label="burst", kde=True, alpha=0.7)
+    sns.histplot(
+        err[lab],
+        bins=100,
+        color="orange",
+        stat="density",
+        label="burst",
+        kde=True,
+        alpha=0.7,
+    )
 plt.title("NCD distribution")
 plt.xlabel("score")
 plt.ylabel("density")
@@ -312,7 +344,6 @@ print(
 )
 
 # save metrics json
-import json
 metrics = {
     "window_P": float(P),
     "window_R": float(R),

@@ -97,9 +97,11 @@ plt.show()
 ─────────────────────────────────────────────────────────────────────────────
 """
 
-
 from __future__ import annotations
-import bz2, lzma, zlib, numpy as np
+import bz2
+import lzma
+import zlib
+import numpy as np
 from typing import Literal
 
 Codec = Literal["zlib", "bz2", "lzma"]
@@ -115,6 +117,7 @@ def ncd_adjacent(
     codec: Codec = "zlib",
     *,
     per_win_norm: bool = False,
+    diff_order: int = 0,
 ) -> np.ndarray:
     """NCD between each window and its predecessor.
 
@@ -127,6 +130,10 @@ def ncd_adjacent(
     per_win_norm : bool, default False
         If ``True`` each window is normalised by its peak amplitude before
         compression which removes per-window scaling differences.
+    diff_order : int, default 0
+        Apply ``numpy.diff`` of this order along the time axis before
+        compression. Using a first difference can emphasise burst
+        onsets while reducing baseline drift.
     """
     if win.ndim != 2:
         raise ValueError("windows must be 2-D (n_win, win_len)")
@@ -134,13 +141,14 @@ def ncd_adjacent(
     if n < 2:
         return np.zeros(n, np.float32)
 
+    arr = win.astype(np.float32, copy=False)
+    if diff_order > 0:
+        arr = np.diff(arr, n=diff_order, axis=1)
     if per_win_norm:
-        w = win - win.mean(axis=1, keepdims=True)
-        peak = np.abs(w).max(axis=1, keepdims=True)
-        w = np.divide(w, peak + 1e-9, out=w)
-        w_i16 = np.round(w * 32767).astype(np.int16, copy=False)
-    else:
-        w_i16 = win.astype(np.int16, copy=False)
+        arr = arr - arr.mean(axis=1, keepdims=True)
+        peak = np.abs(arr).max(axis=1, keepdims=True)
+        arr = np.divide(arr, peak + 1e-9, out=arr)
+    w_i16 = np.round(arr * 32767).astype(np.int16, copy=False)
     clen = [_clen(w.tobytes(), codec) for w in w_i16]
 
     out = np.empty(n, np.float32)
