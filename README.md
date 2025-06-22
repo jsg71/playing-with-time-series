@@ -25,6 +25,8 @@ The code is intentionally small and pedagogical, aimed at students or engineers 
 │   ├── eval_ae.py           # AE burst detection
 │   ├── eval_ae_baseline.py  # legacy AE evaluation
 │   ├── eval_resnet.py       # ResNet evaluation
+│   ├── train_gnn.py         # GNN lightning locator training
+│   ├── eval_gnn.py          # evaluate GNN locator
 │   └── run_ncd.py           # NCD detector (no training)
 ├── leela_ml/                # core library code
 │   ├── signal_sim/          # synthetic waveform simulator
@@ -34,6 +36,7 @@ The code is intentionally small and pedagogical, aimed at students or engineers 
 │   │   ├── dae_unet_baseline.py
 │   │   ├── raw_resnet.py
 │   │   └── ncd.py
+│   ├── gnn_lightning/       # graph-based lightning locator
 ├── configs/                 # YAML hyper‑parameter files
 ├── data/                    # synthetic / real waveforms live here
 ├── reports/                 # metrics & plots land here
@@ -42,8 +45,24 @@ The code is intentionally small and pedagogical, aimed at students or engineers 
 └── README.md                # you are here
 ```
 
-> **Dependencies:** Python ≥ 3.9, PyTorch 2 .x, PyTorch‑Lightning, NumPy, SciPy, scikit‑learn, matplotlib, seaborn.  
+> **Dependencies:** Python ≥ 3.9, PyTorch 2 .x, PyTorch‑Lightning, NumPy, SciPy, scikit‑learn, matplotlib, seaborn.
 > GPU optional – runs on CPU albeit slower.
+
+## Installation
+
+Create a fresh Python environment and install the requirements.  PyTorch and
+PyTorch Geometric need to be installed separately (see the official install
+guides for CUDA/CPU wheels).
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install torch torchvision torchaudio  # pick the wheel for your system
+pip install torch_geometric
+```
+
+---
 
 ---
 
@@ -100,8 +119,13 @@ Produces window‑ & event‑level metrics plus plots:
 ### 2·2 Compression (NCD)
 
 ```bash
-python scripts/run_ncd.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json   --chunk 512 --overlap 0.9   --codec zlib --mad_k 6
+python scripts/run_ncd.py   --npy data/storm5_wave.npy --meta data/storm5_meta.json \
+    --chunk 512 --overlap 0.9   --codec zlib --mad_k 6 --norm
 ```
+
+Adding ``--norm`` normalises each window before compression which typically
+improves contrast between noise and bursts. You can also call
+``ncd_adjacent(wins, per_win_norm=True)`` from Python.
 
 No training required. Flags bursts where NCD spikes above rolling median + k × MAD.
 
@@ -143,7 +167,7 @@ Outputs VAL & TEST AUROC / F1 and saves `reports/resnet_val_test.png`.
 ```python
 from leela_ml.models.dae_unet import UNet1D
 from leela_ml.datamodules_npy import StrikeDataset
-from leela_ml.ncd import ncd_adjacent
+from leela_ml.models.ncd import ncd_adjacent
 
 ds = StrikeDataset("data/storm5_wave.npy", "data/storm5_meta.json",
                    chunk_size=512, overlap=0.9)
@@ -155,7 +179,8 @@ err = (recon - x).abs().mean()
 print("reconstruction error:", err.item())
 ```
 
-You can likewise call `ncd_adjacent(ds.windows)` to get an NCD score vector.
+You can likewise call `ncd_adjacent(ds._windows.astype(np.float32, copy=False))`
+to get an NCD score vector.
 
 ---
 
@@ -179,7 +204,45 @@ You can likewise call `ncd_adjacent(ds.windows)` to get an NCD score vector.
 
 ---
 
-## 8 Future Work
+## 8 Graph Neural Network Locator
+
+This repository now includes a proof-of-concept implementation of the graph
+neural network workflow described by Tian et al. (2025). The simulator now
+splits events into **train/val/test** subsets to avoid data leakage. Use
+`simulate_dataset()` under `leela_ml/gnn_lightning/` to create multi-station
+recordings. Training logs losses to CSV and writes a `gnn_training.png` curve.
+Evaluation reports the mean location error and can plot predicted vs true
+locations.
+
+### Example
+
+```bash
+# ensure local imports resolve
+export PYTHONPATH=$PWD
+
+# generate a realistic multi-station recording (about five minutes)
+python scripts/sim_gnn.py --minutes 5 \
+    --out data/demo --stations data/synthetic/stations.json \
+    --events_mult 5 --clusters_per_minute 6
+
+# train for a good number of epochs and log the loss curve
+python scripts/train_gnn.py --prefix data/demo --epochs 50 --bs 32 \
+    --ckpt lightning_logs/gnn_best.ckpt
+
+# disable denoising with `--no_denoise` if you want to train on raw snippets
+
+# evaluate on the held‑out test set and plot predictions
+python scripts/eval_gnn.py --prefix data/demo --split test \
+    --ckpt lightning_logs/gnn_best.ckpt --plot
+```
+
+Training writes metrics to `lightning_logs/gnn/metrics.csv` and saves the
+learning curve as `lightning_logs/gnn_training.png`.  Evaluation with
+`--plot` creates `reports/gnn_pred_vs_true_test.png`.
+
+---
+
+## 9 Future Work
 
 * Multichannel fusion (multiple sensors).  
 * Streaming (real‑time) detection.  
