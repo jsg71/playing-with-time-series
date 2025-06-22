@@ -169,6 +169,7 @@ an NCD score vector that is invariant to per-window scale.
 | `CUDA device not found` | Install CPU‑only wheel: `pip install torch==<ver>+cpu` |
 | Large checkpoint rejected by GitHub | `git lfs install && git lfs track "*.pt"` |
 | Training slow | Use `--precision 16`, reduce `--depth`, smaller `--chunk` |
+| `TypeError: ncd_adjacent()` unknown keyword | Import via `from leela_ml.ncd import ncd_adjacent` |
 
 ---
 
