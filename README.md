@@ -1,10 +1,10 @@
 
-# Lightning Burst Detection with Deep Learning & Compression
+# Burst Detection with Deep Learning & Compression
 
 ## Introduction & Motivation
-**Lightning Burst Detection** is a research‑oriented time‑series project focused on detecting short “burst” events (simulated lightning strikes) within a noisy continuous signal. The repository provides everything you need to:
+**Burst Detection** is a research‑oriented time‑series project focused on detecting short “burst” events (simulated lightning strikes) within a noisy continuous signal. The repository provides everything you need to:
 
-* **Generate realistic synthetic data** that mimics real lightning bursts.
+* **Generate realistic synthetic data** that mimics real bursts.
 * **Train and evaluate** three complementary detection pipelines:
   1. **Compression‐based** Normalised Compression Distance (NCD) — zero‑training baseline.
   2. **Autoencoder anomaly detector** — unsupervised 1‑D U‑Net.
