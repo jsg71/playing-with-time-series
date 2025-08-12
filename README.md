@@ -193,6 +193,25 @@ an NCD score vector that is invariant to per-window scale.
 
 ---
 
+# Leela-ML (demo scaffolding)
+
+A modular playground for signal modeling and anomaly detection with **clean docs**.
+
+[![Docs](https://img.shields.io/badge/docs-MkDocs%20Material-blue)](#) <!-- replace # with your Pages URL -->
+
+## Quickstart
+
+```bash
+python -m venv .venv
+source .venv/bin/activate      # Windows: .venv\Scripts\activate
+python -m pip install -U pip
+python -m pip install mkdocs mkdocs-material mkdocstrings mkdocstrings-python griffe \
+  mkdocs-gen-files mkdocs-section-index mkdocs-jupyter pymdown-extensions
+
+python -m mkdocs serve
+
+
+
 *Project created on macOS, validated on Ubuntu 20.04 with CUDA 11.8.  Feel free to raise issues or PRs!*  
 
 
