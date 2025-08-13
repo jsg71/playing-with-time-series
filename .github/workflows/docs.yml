@@ -1,3 +1,4 @@
+# .github/workflows/docs.yml
 name: Docs (MkDocs → GitHub Pages)
 
 on:
@@ -18,7 +19,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     env:
-      DOCS_NOTEBOOKS: "1"     # set "0" to skip notebook rendering
+      DOCS_NOTEBOOKS: "1"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -51,4 +52,3 @@ jobs:
       - name: Deploy to GitHub Pages
         id: deploy
         uses: actions/deploy-pages@v4
-
