@@ -24,6 +24,7 @@ version: "1.0"
 9. [Explainability: feature importance without labels](#explainability-feature-importance-without-labels)  
 10. [Production hardening opportunities](#production-hardening-opportunities)  
 11. [Appendix: Idioms & patterns](#appendix-idioms--patterns)
+12. [Python & NumPy Snippets](#Python--NumPy-Snippets)
 
 ---
 
@@ -395,11 +396,7 @@ if n_win <= 0:
 
 ---
 
-## Final thought
-
-The project attempts to balance **clarity** (typed containers, registries, consistent interfaces) with **some performance** (chunking, batch scoring) and **reproducibility** (seeded RNGs, stateless evaluators). The same patterns generalise to other time‑series problems: keep the **contracts crisp**, the **data flow explicit**, and the **evaluation decoupled**.
-
-## Python & NumPy Snippets (How They Work, with Naïve Counter‑Examples)
+## Python & NumPy Snippets
 
 > This section explains a handful of **non‑trivial patterns** used in the project, shows a **naïve alternative** for contrast, and suggests **advanced optimisation** paths (NumPy/Numba/CuPy).
 
@@ -746,3 +743,9 @@ truth[stn][w0:w1] = True  # off-by-ones & boundary misses
 - **Quantile/percentile**: for very long runs, consider **TDigest** or **P² quantile estimator** to compute thresholds online without holding all scores.
 
 > **Rule of thumb:** *Vectorise first, batch transforms second, only then add threads/GPUs.*
+
+
+## Final thought
+
+The project attempts to balance **clarity** (typed containers, registries, consistent interfaces) with **some performance** (chunking, batch scoring) and **reproducibility** (seeded RNGs, stateless evaluators). The same patterns generalise to other time‑series problems: keep the **contracts crisp**, the **data flow explicit**, and the **evaluation decoupled**.
+
