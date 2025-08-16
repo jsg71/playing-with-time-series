@@ -399,7 +399,7 @@ if n_win <= 0:
 
 The project attempts to balance **clarity** (typed containers, registries, consistent interfaces) with **some performance** (chunking, batch scoring) and **reproducibility** (seeded RNGs, stateless evaluators). The same patterns generalise to other time‑series problems: keep the **contracts crisp**, the **data flow explicit**, and the **evaluation decoupled**.
 
-## Appendix — Python & NumPy Snippets (How They Work, with Naïve Counter‑Examples)
+## Python & NumPy Snippets (How They Work, with Naïve Counter‑Examples)
 
 > This section explains a handful of **non‑trivial patterns** used in the project, shows a **naïve alternative** for contrast, and suggests **advanced optimisation** paths (NumPy/Numba/CuPy).
 
