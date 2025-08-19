@@ -121,31 +121,62 @@ if readme_src.exists():
         fd.write(readme_src.read_text(encoding="utf-8"))
     mkdocs_gen_files.set_edit_path(readme_dst, readme_src)
 
-# 5) Vendor MathJax locally from the classic Jupyter 'notebook' package
-#    so equations render offline with no CDN.
-try:
-    import os as _os, notebook  # classic Notebook ships MathJax v2
-    from pathlib import Path as _Path
-    _src = _Path(_os.path.dirname(notebook.__file__)) / "static" / "components" / "MathJax"
-    if _src.exists():
-        for p in _src.rglob("*"):
-            if p.is_dir():
-                continue
-            rel = p.relative_to(_src)
-            dest = _Path("assets") / "MathJax" / rel
-            with mkdocs_gen_files.open(dest, "wb") as fd:
-                fd.write(p.read_bytes())
-        # small helper to re-typeset after SPA page changes
-        _helper = _Path("javascripts") / "mathjax2.js"
-        with mkdocs_gen_files.open(_helper, "w") as fd:
-            fd.write("""\
-// MathJax v2: configure delimiters and re-typeset after SPA page changes
+# 5) Vendor MathJax locally so equations render offline (Notebook 7 & 6)
+from pathlib import Path as _Path
+import importlib, sys
+
+def _candidate_paths():
+    cands = []
+    # Notebook 7: assets live in nbclassic
+    try:
+        m = importlib.import_module("nbclassic")
+        p = _Path(m.__file__).parent / "static" / "components" / "MathJax"
+        cands.append(("nbclassic", p))
+    except Exception:
+        pass
+    # Notebook <= 6: components/MathJax
+    try:
+        m = importlib.import_module("notebook")
+        base = _Path(m.__file__).parent / "static"
+        cands.append(("notebook-components", base / "components" / "MathJax"))
+        # Some distro variants use static/mathjax
+        cands.append(("notebook-legacy", base / "mathjax"))
+    except Exception:
+        pass
+    return cands
+
+def _copy_mathjax(src: _Path, dst: _Path) -> None:
+    for p in src.rglob("*"):
+        if p.is_dir():
+            continue
+        rel = p.relative_to(src)
+        with mkdocs_gen_files.open(dst / rel, "wb") as fd:
+            fd.write(p.read_bytes())
+
+label, src = None, None
+for lbl, path in _candidate_paths():
+    if path.exists():
+        label, src = lbl, path
+        break
+
+if src is None:
+    print("[docs] ERROR: Could not find MathJax under nbclassic/notebook. "
+          "Please ensure 'nbclassic' (for Notebook 7) or 'notebook<=6' is installed.")
+else:
+    dst = _Path("assets") / "MathJax"
+    _copy_mathjax(src, dst)
+    print(f"[docs] MathJax vendored from '{label}' @ {src}")
+
+    # helper to re-typeset after SPA page changes (Material theme)
+    helper = _Path("javascripts") / "mathjax2.js"
+    with mkdocs_gen_files.open(helper, "w") as fd:
+        fd.write(r"""// MathJax v2: configure delimiters & re-typeset after SPA page changes
 window.MathJax = window.MathJax || {};
 window.MathJax.Hub = window.MathJax.Hub || {};
 window.MathJax.Hub.Config({
   tex2jax: {
-    inlineMath: [["$", "$"], ["\\\\(", "\\\\)"]],
-    displayMath: [["$$", "$$"], ["\\\\[", "\\\\]"]],
+    inlineMath: [["$", "$"], ["\\(", "\\)"]],
+    displayMath: [["$$", "$$"], ["\\[", "\\]"]],
     processEscapes: true
   },
   showProcessingMessages: false,
@@ -164,12 +195,3 @@ window.MathJax.Hub.Config({
   }
 })();
 """)
-        # optional: print a tiny build note to reassure you
-        print("[docs] MathJax vendored from 'notebook' into assets/MathJax")
-    else:
-        print("[docs] WARNING: Could not locate MathJax in 'notebook'; "
-              "ask admins to install the 'notebook' package.")
-except Exception as _e:
-    print(f"[docs] WARNING: MathJax vendor step skipped: {_e}")
-
-
