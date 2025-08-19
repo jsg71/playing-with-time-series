@@ -123,29 +123,44 @@ if readme_src.exists():
 
 # 5) Vendor MathJax locally so equations render offline (Notebook 7 & 6)
 from pathlib import Path as _Path
-import importlib, sys
+import importlib
+import sys
 
-def _candidate_paths():
+def _jupyter_roots():
+    try:
+        from jupyter_core.paths import jupyter_path
+        return [_Path(p) for p in jupyter_path()]
+    except Exception:
+        # Fallback guesses
+        return [
+            _Path(sys.prefix) / "share" / "jupyter",
+            _Path("/usr/local/share/jupyter"),
+            _Path("/usr/share/jupyter"),
+        ]
+
+def _candidate_dirs():
     cands = []
-    # Notebook 7: assets live in nbclassic
+    # Package-adjacent candidates (rarely used in NB7 but cheap to try)
     try:
         m = importlib.import_module("nbclassic")
-        p = _Path(m.__file__).parent / "static" / "components" / "MathJax"
-        cands.append(("nbclassic", p))
+        cands.append(("nbclassic-pkg", _Path(m.__file__).parent / "static" / "components" / "MathJax"))
     except Exception:
         pass
-    # Notebook <= 6: components/MathJax
     try:
         m = importlib.import_module("notebook")
         base = _Path(m.__file__).parent / "static"
-        cands.append(("notebook-components", base / "components" / "MathJax"))
-        # Some distro variants use static/mathjax
-        cands.append(("notebook-legacy", base / "mathjax"))
+        cands.append(("notebook-pkg-components", base / "components" / "MathJax"))
+        cands.append(("notebook-pkg-legacy",     base / "mathjax"))
     except Exception:
         pass
+    # Jupyter data paths (Notebook 7 installs here)
+    for root in _jupyter_roots():
+        cands.append(("nbclassic-data", root / "nbclassic" / "static" / "components" / "MathJax"))
+        cands.append(("notebook-data-components", root / "notebook" / "static" / "components" / "MathJax"))
+        cands.append(("notebook-data-legacy",     root / "notebook" / "static" / "mathjax"))
     return cands
 
-def _copy_mathjax(src: _Path, dst: _Path) -> None:
+def _copy_tree(src: _Path, dst: _Path) -> None:
     for p in src.rglob("*"):
         if p.is_dir():
             continue
@@ -154,17 +169,16 @@ def _copy_mathjax(src: _Path, dst: _Path) -> None:
             fd.write(p.read_bytes())
 
 label, src = None, None
-for lbl, path in _candidate_paths():
-    if path.exists():
+for lbl, path in _candidate_dirs():
+    if path.exists() and (path / "MathJax.js").exists():
         label, src = lbl, path
         break
 
 if src is None:
-    print("[docs] ERROR: Could not find MathJax under nbclassic/notebook. "
-          "Please ensure 'nbclassic' (for Notebook 7) or 'notebook<=6' is installed.")
+    print("[docs] ERROR: Could not find MathJax under nbclassic/notebook data dirs.")
 else:
     dst = _Path("assets") / "MathJax"
-    _copy_mathjax(src, dst)
+    _copy_tree(src, dst)
     print(f"[docs] MathJax vendored from '{label}' @ {src}")
 
     # helper to re-typeset after SPA page changes (Material theme)
