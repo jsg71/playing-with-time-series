@@ -121,70 +121,49 @@ if readme_src.exists():
         fd.write(readme_src.read_text(encoding="utf-8"))
     mkdocs_gen_files.set_edit_path(readme_dst, readme_src)
 
-# 5) Vendor MathJax locally so equations render offline (Notebook 7 & 6)
-from pathlib import Path as _Path
-import importlib
-import sys
+# 5) Vendor MathJax assets for offline math rendering
+# --------------------------------------------------------------
+# This block looks inside the current Python env's JupyterLab static
+# (…/site-packages/jupyterlab/static), finds MathJax v3 (tex-*.js)
+# or v2 (MathJax.js), copies the appropriate folder into the docs
+# virtual FS, and writes a tiny helper JS to re-typeset after page changes.
 
-def _jupyter_roots():
-    try:
-        from jupyter_core.paths import jupyter_path
-        return [_Path(p) for p in jupyter_path()]
-    except Exception:
-        # Fallback guesses
-        return [
-            _Path(sys.prefix) / "share" / "jupyter",
-            _Path("/usr/local/share/jupyter"),
-            _Path("/usr/share/jupyter"),
-        ]
-
-def _candidate_dirs():
-    cands = []
-    # Package-adjacent candidates (rarely used in NB7 but cheap to try)
-    try:
-        m = importlib.import_module("nbclassic")
-        cands.append(("nbclassic-pkg", _Path(m.__file__).parent / "static" / "components" / "MathJax"))
-    except Exception:
-        pass
-    try:
-        m = importlib.import_module("notebook")
-        base = _Path(m.__file__).parent / "static"
-        cands.append(("notebook-pkg-components", base / "components" / "MathJax"))
-        cands.append(("notebook-pkg-legacy",     base / "mathjax"))
-    except Exception:
-        pass
-    # Jupyter data paths (Notebook 7 installs here)
-    for root in _jupyter_roots():
-        cands.append(("nbclassic-data", root / "nbclassic" / "static" / "components" / "MathJax"))
-        cands.append(("notebook-data-components", root / "notebook" / "static" / "components" / "MathJax"))
-        cands.append(("notebook-data-legacy",     root / "notebook" / "static" / "mathjax"))
-    return cands
-
-def _copy_tree(src: _Path, dst: _Path) -> None:
+def _copy_tree_to_docs(src: Path, dst_prefix: Path) -> None:
     for p in src.rglob("*"):
         if p.is_dir():
             continue
         rel = p.relative_to(src)
-        with mkdocs_gen_files.open(dst / rel, "wb") as fd:
+        out = dst_prefix / rel.as_posix()
+        out = Path(*out.parts)  # normalise separators
+        with mkdocs_gen_files.open(out, "wb") as fd:
             fd.write(p.read_bytes())
 
-label, src = None, None
-for lbl, path in _candidate_dirs():
-    if path.exists() and (path / "MathJax.js").exists():
-        label, src = lbl, path
-        break
+JS_HELPER_V3 = r"""
+// MathJax v3: configure delimiters & re-typeset after SPA page changes
+window.MathJax = {
+  tex: {
+    inlineMath: [["$", "$"], ["\\(", "\\)"]],
+    displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+    processEscapes: true,
+    tags: "ams"
+  }
+};
+(function () {
+  function typeset() {
+    if (window.MathJax && window.MathJax.typesetPromise) {
+      window.MathJax.typesetPromise();
+    }
+  }
+  if (typeof document$ !== "undefined") {
+    document$.subscribe(typeset);
+  } else {
+    document.addEventListener("DOMContentLoaded", typeset);
+  }
+})();
+"""
 
-if src is None:
-    print("[docs] ERROR: Could not find MathJax under nbclassic/notebook data dirs.")
-else:
-    dst = _Path("assets") / "MathJax"
-    _copy_tree(src, dst)
-    print(f"[docs] MathJax vendored from '{label}' @ {src}")
-
-    # helper to re-typeset after SPA page changes (Material theme)
-    helper = _Path("javascripts") / "mathjax2.js"
-    with mkdocs_gen_files.open(helper, "w") as fd:
-        fd.write(r"""// MathJax v2: configure delimiters & re-typeset after SPA page changes
+JS_HELPER_V2 = r"""
+// MathJax v2: delimiters & re-typeset after Material's client-side page changes
 window.MathJax = window.MathJax || {};
 window.MathJax.Hub = window.MathJax.Hub || {};
 window.MathJax.Hub.Config({
@@ -208,4 +187,45 @@ window.MathJax.Hub.Config({
     document.addEventListener("DOMContentLoaded", typeset);
   }
 })();
-""")
+"""
+
+def _vendor_mathjax_assets() -> None:
+    try:
+        import importlib
+        jl = importlib.import_module("jupyterlab")
+        static = Path(jl.__file__).parent / "static"
+        if not static.exists():
+            return  # nothing to do
+
+        # Prefer MathJax v3 entry points
+        v3_entry = next((p for p in static.rglob("tex-svg.js")), None) \
+                   or next((p for p in static.rglob("tex-chtml.js")), None)
+        if v3_entry:
+            base = v3_entry.parent
+            for pr in v3_entry.parents:
+                if pr.name.lower() == "mathjax":
+                    base = pr
+                    break
+            _copy_tree_to_docs(base, Path("assets", "mathjax"))
+            with mkdocs_gen_files.open(Path("javascripts", "mathjax3.js"), "w") as fd:
+                fd.write(JS_HELPER_V3)
+            print(f"[gen_pages] MathJax v3 vendored from {base}")
+            return
+
+        # Fallback: MathJax v2
+        v2_entry = next((p for p in static.rglob("MathJax.js")), None)
+        if v2_entry:
+            base = v2_entry.parent
+            for pr in v2_entry.parents:
+                if pr.name.lower() == "mathjax":
+                    base = pr
+                    break
+            _copy_tree_to_docs(base, Path("assets", "MathJax"))
+            with mkdocs_gen_files.open(Path("javascripts", "mathjax2.js"), "w") as fd:
+                fd.write(JS_HELPER_V2)
+            print(f"[gen_pages] MathJax v2 vendored from {base}")
+    except Exception as e:
+        # Silent but informative: keeps builds green even if math assets are absent
+        print(f"[gen_pages] MathJax vendor skipped: {e}")
+
+_vendor_mathjax_assets()
