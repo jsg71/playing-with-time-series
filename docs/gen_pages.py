@@ -121,3 +121,55 @@ if readme_src.exists():
         fd.write(readme_src.read_text(encoding="utf-8"))
     mkdocs_gen_files.set_edit_path(readme_dst, readme_src)
 
+# 5) Vendor MathJax locally from the classic Jupyter 'notebook' package
+#    so equations render offline with no CDN.
+try:
+    import os as _os, notebook  # classic Notebook ships MathJax v2
+    from pathlib import Path as _Path
+    _src = _Path(_os.path.dirname(notebook.__file__)) / "static" / "components" / "MathJax"
+    if _src.exists():
+        for p in _src.rglob("*"):
+            if p.is_dir():
+                continue
+            rel = p.relative_to(_src)
+            dest = _Path("assets") / "MathJax" / rel
+            with mkdocs_gen_files.open(dest, "wb") as fd:
+                fd.write(p.read_bytes())
+        # small helper to re-typeset after SPA page changes
+        _helper = _Path("javascripts") / "mathjax2.js"
+        with mkdocs_gen_files.open(_helper, "w") as fd:
+            fd.write("""\
+// MathJax v2: configure delimiters and re-typeset after SPA page changes
+window.MathJax = window.MathJax || {};
+window.MathJax.Hub = window.MathJax.Hub || {};
+window.MathJax.Hub.Config({
+  tex2jax: {
+    inlineMath: [["$", "$"], ["\\\\(", "\\\\)"]],
+    displayMath: [["$$", "$$"], ["\\\\[", "\\\\]"]],
+    processEscapes: true
+  },
+  showProcessingMessages: false,
+  messageStyle: "none"
+});
+(function () {
+  function typeset() {
+    if (window.MathJax && window.MathJax.Hub && window.MathJax.Hub.Queue) {
+      window.MathJax.Hub.Queue(["Typeset", MathJax.Hub]);
+    }
+  }
+  if (typeof document$ !== "undefined") {
+    document$.subscribe(typeset);
+  } else {
+    document.addEventListener("DOMContentLoaded", typeset);
+  }
+})();
+""")
+        # optional: print a tiny build note to reassure you
+        print("[docs] MathJax vendored from 'notebook' into assets/MathJax")
+    else:
+        print("[docs] WARNING: Could not locate MathJax in 'notebook'; "
+              "ask admins to install the 'notebook' package.")
+except Exception as _e:
+    print(f"[docs] WARNING: MathJax vendor step skipped: {_e}")
+
+
