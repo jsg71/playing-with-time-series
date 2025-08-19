@@ -121,22 +121,31 @@ if readme_src.exists():
         fd.write(readme_src.read_text(encoding="utf-8"))
     mkdocs_gen_files.set_edit_path(readme_dst, readme_src)
 
-# 5) Vendor MathJax assets for offline math rendering
-# --------------------------------------------------------------
-# This block looks inside the current Python env's JupyterLab static
-# (…/site-packages/jupyterlab/static), finds MathJax v3 (tex-*.js)
-# or v2 (MathJax.js), copies the appropriate folder into the docs
-# virtual FS, and writes a tiny helper JS to re-typeset after page changes.
+# 5) Vendor MathJax assets for offline math rendering (robust + status page)
+# --------------------------------------------------------------------------
+import logging, importlib
+from pathlib import Path
+
+logger = logging.getLogger("mkdocs")
 
 def _copy_tree_to_docs(src: Path, dst_prefix: Path) -> None:
+    """Copy a directory tree into MkDocs' virtual FS (gen-files)."""
     for p in src.rglob("*"):
         if p.is_dir():
             continue
-        rel = p.relative_to(src)
-        out = dst_prefix / rel.as_posix()
-        out = Path(*out.parts)  # normalise separators
+        rel = p.relative_to(src).as_posix()
+        out = Path(dst_prefix, rel)
         with mkdocs_gen_files.open(out, "wb") as fd:
             fd.write(p.read_bytes())
+
+def _write_status_page(lines: list[str]) -> None:
+    """Emit a small page so you can see exactly what happened."""
+    page = Path("guide", "math-vendor-status.md")
+    with mkdocs_gen_files.open(page, "w") as fd:
+        fd.write("# Math rendering vendor status\n\n")
+        for ln in lines:
+            fd.write(f"- {ln}\n")
+        fd.write("\n> Add the corresponding `extra_javascript` lines in `mkdocs.yml` as indicated above.\n")
 
 JS_HELPER_V3 = r"""
 // MathJax v3: configure delimiters & re-typeset after SPA page changes
@@ -190,42 +199,86 @@ window.MathJax.Hub.Config({
 """
 
 def _vendor_mathjax_assets() -> None:
+    status: list[str] = []
     try:
-        import importlib
+        # Look inside JupyterLab's package static in *this* venv
         jl = importlib.import_module("jupyterlab")
         static = Path(jl.__file__).parent / "static"
+        status.append(f"jupyterlab static: {static} (exists={static.exists()})")
         if not static.exists():
-            return  # nothing to do
-
-        # Prefer MathJax v3 entry points
-        v3_entry = next((p for p in static.rglob("tex-svg.js")), None) \
-                   or next((p for p in static.rglob("tex-chtml.js")), None)
-        if v3_entry:
-            base = v3_entry.parent
-            for pr in v3_entry.parents:
-                if pr.name.lower() == "mathjax":
-                    base = pr
-                    break
-            _copy_tree_to_docs(base, Path("assets", "mathjax"))
-            with mkdocs_gen_files.open(Path("javascripts", "mathjax3.js"), "w") as fd:
-                fd.write(JS_HELPER_V3)
-            print(f"[gen_pages] MathJax v3 vendored from {base}")
+            logger.warning("[gen_pages] No JupyterLab static directory; skipping MathJax vendor.")
+            _write_status_page(status)
             return
 
-        # Fallback: MathJax v2
-        v2_entry = next((p for p in static.rglob("MathJax.js")), None)
-        if v2_entry:
-            base = v2_entry.parent
-            for pr in v2_entry.parents:
-                if pr.name.lower() == "mathjax":
-                    base = pr
-                    break
-            _copy_tree_to_docs(base, Path("assets", "MathJax"))
+        # Wider search: any tex-*.js (v3) anywhere under static (hashed vendor paths included)
+        v3_entries = list(static.rglob("tex-*.js"))
+        status.append(f"v3 candidate entries found: {len(v3_entries)}")
+        entry = None
+        base_dir = None
+
+        if v3_entries:
+            # Prefer tex-chtml.js if present; else take the first match
+            v3_entries.sort(key=lambda p: (p.name != "tex-chtml.js", str(p)))
+            entry = v3_entries[0]
+            # Walk up to nearest 'mathjax' folder if it exists, otherwise use entry's parent
+            base_dir = next((p for p in entry.parents if p.name.lower() == "mathjax"), entry.parent)
+            out_root = Path("assets", "mathjax")
+            _copy_tree_to_docs(base_dir, out_root)
+            # Compute the relative path to the entry under docs/, to show exact JS to include
+            entry_rel = Path("assets", "mathjax", entry.relative_to(base_dir).as_posix())
+            with mkdocs_gen_files.open(Path("javascripts", "mathjax3.js"), "w") as fd:
+                fd.write(JS_HELPER_V3)
+            msg = f"MathJax v3 vendored from {base_dir}"
+            logger.info("[gen_pages] " + msg)
+            status.append(msg)
+            status.append(f"Use in mkdocs.yml → extra_javascript:\n  - {entry_rel.as_posix()}\n  - javascripts/mathjax3.js")
+            _write_status_page(status)
+            return
+
+        # Fallback: MathJax v2 entry
+        v2_entries = list(static.rglob("MathJax.js"))
+        status.append(f"v2 candidate entries found: {len(v2_entries)}")
+        if v2_entries:
+            entry = v2_entries[0]
+            base_dir = next((p for p in entry.parents if p.name.lower() == "mathjax"), entry.parent)
+            out_root = Path("assets", "MathJax")
+            _copy_tree_to_docs(base_dir, out_root)
+            entry_rel = Path("assets", "MathJax", entry.relative_to(base_dir).as_posix())
             with mkdocs_gen_files.open(Path("javascripts", "mathjax2.js"), "w") as fd:
                 fd.write(JS_HELPER_V2)
-            print(f"[gen_pages] MathJax v2 vendored from {base}")
+            msg = f"MathJax v2 vendored from {base_dir}"
+            logger.info("[gen_pages] " + msg)
+            status.append(msg)
+            status.append(f"Use in mkdocs.yml → extra_javascript:\n  - {entry_rel.as_posix()}?config=TeX-AMS-MML_HTMLorMML\n  - javascripts/mathjax2.js")
+            _write_status_page(status)
+            return
+
+        # Last resort: jupyter_server_mathjax (if installed)
+        try:
+            jsm = importlib.import_module("jupyter_server_mathjax")
+            base_dir = Path(jsm.__file__).parent / "static"
+            if base_dir.exists():
+                out_root = Path("assets", "MathJax")
+                _copy_tree_to_docs(base_dir, out_root)
+                with mkdocs_gen_files.open(Path("javascripts", "mathjax2.js"), "w") as fd:
+                    fd.write(JS_HELPER_V2)
+                msg = f"MathJax v2 vendored from jupyter_server_mathjax: {base_dir}"
+                logger.info("[gen_pages] " + msg)
+                status.append(msg)
+                status.append("Use in mkdocs.yml → extra_javascript:\n  - assets/MathJax/MathJax.js?config=TeX-AMS-MML_HTMLorMML\n  - javascripts/mathjax2.js")
+                _write_status_page(status)
+                return
+        except Exception:
+            pass
+
+        # Nothing found → explicit status
+        status.append("No MathJax entry files found under JupyterLab static.")
+        logger.warning("[gen_pages] MathJax vendor skipped: no entry files found.")
+        _write_status_page(status)
+
     except Exception as e:
-        # Silent but informative: keeps builds green even if math assets are absent
-        print(f"[gen_pages] MathJax vendor skipped: {e}")
+        msg = f"MathJax vendor skipped due to error: {e}"
+        logger.warning("[gen_pages] " + msg)
+        _write_status_page([msg])
 
 _vendor_mathjax_assets()
