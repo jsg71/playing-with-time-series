@@ -69,4 +69,5 @@ extra_css:
 
 extra_javascript:
   - javascripts/mathjax3-config.js                # <-- load config FIRST
-  - https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
+  - assets/mathjax/es5/tex-mml-chtml.js
+  #- https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js
