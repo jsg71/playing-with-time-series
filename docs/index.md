@@ -14,5 +14,14 @@ Welcome! This site is built automatically from your code and notebooks.
 - [Simple MAD Detector Card](cards/mad-detector.md)
 - [ResNet Autoencoder Card](cards/resnet-autoencoder.md)
 - [Waveform Bursts Dataset Card](cards/waveform-bursts-dataset.md)
+- [Hilbert Envelope Card](cards/model-card-hilbert-envelope.md)
+- [Data Storm Card](cards/data-card-storm-sim.md)
+- [CDAE Card](cards/model-card-cdae.md)
+- [EIF Card](cards/model-card-extended-isolation-forest.md)
+- [GNN CDAE Card](cards/model-card-graph-cdae.md)
+- [IF Card](cards/model-card-isolation-forest.md)
+- [NCD Card](cards/model-card-ncd.md)
+- [OCSVM Card](cards/model-card-ocsvm.md)
+- [Python Engineering Card](cards/python-engineering-playbook.md)
 
 

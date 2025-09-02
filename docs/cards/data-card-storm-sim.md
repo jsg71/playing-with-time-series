@@ -1,12 +1,12 @@
-
 ---
 title: "Data Card — Synthetic Lightning‑Storm Waveforms (StormGenerator)"
 status: "production-candidate"
 owners:
   - team: Lightning Sim / Data & Detection
-    email: detection-team@example.internal
+    email: john.goodacre@example.co.uk
 dataset-id: "lightning_sim.data.storm_synth"
-license: "Internal / Company Confidential"
+classification: "Official Sensitive"
+license: "Official Sensitive"
 version: "0.1.0"
 tags:
   - synthetic
@@ -16,6 +16,8 @@ tags:
   - anomaly-detection
   - window-level-labels
 ---
+
+# Data Card — Synthetic Lightning‑Storm Waveforms (StormGenerator)
 
 > **TL;DR**  
 > Fully synthetic, **reproducible** multi‑station lightning waveform data produced by `StormGenerator`.  
@@ -42,7 +44,7 @@ tags:
 - `seed=424242`, `duration_min=5`  
 - `scenario ∈ {near, medium, far}` controls flash rate and spatial spread  
 - `difficulty ∈ {1,…,9}` toggles impairments (multipath, RFI, clipping, etc.)  
-- `snr_db` controls global SNR (linear factor \(\text{SNR}_\text{lin}=10^{\text{snr\_db}/20}\))  
+- `snr_db` controls global SNR (linear factor \( \mathrm{SNR}_{\mathrm{lin}} = 10^{\mathrm{snr\_db}/20} \))  
 - `fs=109_375`, `bits=14`, `vref=1.0`
 
 ### 2.2 Station network
@@ -61,23 +63,31 @@ Hard‑coded lat/lon for 11 sites (`KEF, VAL, LER, HER, GIB, AKR, CAM, WAT, CAB,
 
 ### 2.3 Geometry & propagation
 - **Distance** (km) via **haversine**:  
-  \[
-  d(\varphi_1,\lambda_1;\varphi_2,\lambda_2) = 2R\,\arcsin\!\sqrt{\sin^2\frac{\Delta\varphi}{2} + \cos\varphi_1\cos\varphi_2\sin^2\frac{\Delta\lambda}{2}},\quad R=6371\,\text{km}.
-  \]
+
+  $$
+  d(\varphi_1,\lambda_1;\varphi_2,\lambda_2)
+  = 2R\,\arcsin\left(\sqrt{\sin^2\frac{\Delta\varphi}{2}
+  + \cos\varphi_1\cos\varphi_2\sin^2\frac{\Delta\lambda}{2}}\right),\quad
+  R=6371\,\mathrm{km}.
+  $$
+
 - **Path loss** (empirical):  
-  \[
-  L(d) = \Big(\tfrac{100}{d+100}\Big)^{0.85}\,\exp(-10^{-4} d)\,\times\begin{cases}
-  \sqrt{2}, & d>600\,\text{km}\\
-  1, & \text{otherwise}
+
+  $$
+  L(d) = \left(\tfrac{100}{d+100}\right)^{0.85}\,\exp(-10^{-4} d)\times
+  \begin{cases}
+  \sqrt{2}, & d>600\,\mathrm{km},\\
+  1,        & \mathrm{otherwise}.
   \end{cases}
-  \]
-- **Propagation delay**: index shift by \(d/300{,}000\) s (speed of light) + Gaussian jitter (≈ 40 µs std).
+  $$
+
+- **Propagation delay**: index shift by \( \tfrac{d}{300{,}000}\,\mathrm{s} \) (speed of light) + Gaussian jitter (\( \approx 40\,\mu\mathrm{s} \) std).
 
 ### 2.4 Flash scheduler & bursts
-- **Flash rate** \(\lambda\) depends on `scenario` and `difficulty`. Inter‑flash gaps ~ **Exponential**.  
+- **Flash rate** \( \lambda \) depends on `scenario` and `difficulty`. Inter‑flash gaps ~ **Exponential**.  
 - Each flash spawns **1–5 strokes** with small (ms) intra‑flash gaps.  
 - **Burst synthesis** (~40 ms) per stroke:  
-  - Damped sinusoid or divergent template (random \(f_0\), decay \(\tau\)).  
+  - Damped sinusoid or divergent template (random \( f_0 \), decay \( \tau \)).  
   - Optional **multipath** echoes, **sprite ring**, and **sky‑wave** low‑pass (on long paths) in frequency domain.  
   - Amplitude set by **CG/IC** type, **path loss**, and global **SNR**.
 
@@ -92,9 +102,10 @@ Hard‑coded lat/lon for 11 sites (`KEF, VAL, LER, HER, GIB, AKR, CAM, WAT, CAB,
 - 4th‑order **Butterworth** low‑pass at 45 kHz (filtfilt).  
 - Optional **clipping** (±0.9 · `vref`).  
 - **Quantisation** to 14‑bit:  
-  \[
-  q = \operatorname{clip}\Big(\mathrm{round}\big(\tfrac{x}{\text{vref}} (2^{13}-1)\big),\; -\!(2^{13}-1),\; 2^{13}-1\Big) \in \mathbb{Z}.
-  \]
+
+  $$
+  q = \operatorname{clip}\Big(\mathrm{round}\big(\tfrac{x}{\mathrm{vref}} (2^{13}-1)\big),\; -(2^{13}-1),\; 2^{13}-1\Big) \in \mathbb{Z}.
+  $$
 
 ---
 
@@ -118,8 +129,8 @@ A single call to `StormGenerator.generate()` returns a **StormBundle**:
 ## 4) Splits, sizes & storage
 
 - **Typical size** (5 min storm, 11 stations):  
-  - Samples per station: \(N = (5\times60 + \text{pre})\cdot 109{,}375\) ≈ **~33 M**.  
-  - Windows per station: \(n_{\text{win}} \approx \lfloor (N-W)/H \rfloor + 1\) (≈ **~65 k**).  
+  - Samples per station: \( N = (5\times 60 + \mathrm{pre})\cdot 109{,}375 \) ≈ **~33 M**.  
+  - Windows per station: \( n_{\mathrm{win}} \approx \left\lfloor \frac{N-W}{H} \right\rfloor + 1 \) (≈ **~65 k**).  
 - **Recommended splits** (all **synthetic**; prefer **config‑based** splits instead of random):  
   - **Train**: low/mid `difficulty` with varied `scenario` and `snr_db` → diverse background.  
   - **Val**: hold‑out seeds; tune model thresholds (`pct`, `contamination`, score cut‑offs).  
@@ -144,7 +155,7 @@ A single call to `StormGenerator.generate()` returns a **StormBundle**:
 
 ## 6) Statistical properties & metrics
 
-- **Class imbalance**: strokes are rare; window‑level positive rate ~ 0.1–1 % depending on `scenario`, `difficulty`, and λ.  
+- **Class imbalance**: strokes are rare; window‑level positive rate ~ 0.1–1 % depending on `scenario`, `difficulty`, and \( \lambda \).  
 - **Recommended metrics**:  
   - **Station level**: precision/recall/F1 over windows; PR‑AUC for score‑based models.  
   - **Network level**: stroke precision/recall/F1 with **quorum** ≥ `min_stn` and **tolerance** `tol_win`.  
@@ -164,13 +175,13 @@ A single call to `StormGenerator.generate()` returns a **StormBundle**:
 
 ---
 
-## 8) Quality & validation checks
+## 8) Privacy, security & governance
 
-- **ADC sanity**: no counts outside ±(2^{13}-1); clipping rate within expected range when `clipping=True`.  
-- **Spectral shape**: 50 Hz line and RFI tones visible at configured amplitudes.  
-- **Geodesy**: haversine distances monotone with station ordering (spot checks).  
-- **Timing**: stroke insert indices respect propagation delay ± jitter.  
-- **Labels**: window masks reflect `[sample_idx, sample_idx + burst_len)` for each station; cross‑validate with Hilbert envelope peaks.
+- **PII** (*Personally Identifiable Information*): none expected in waveforms; treat any auxiliary metadata (e.g., usernames, paths) per policy.  
+- **Classification**: **Official Sensitive** — handle, store, and share in line with your organisation’s Official Sensitive procedures.  
+- **Data locality**: simulation and consumption happen inside the secure environment; no external services called.  
+- **Access control**: restrict export of large waveform arrays; share on a need‑to‑know basis.  
+- **Auditability**: seeds, configs, and generator versions are logged per bundle.
 
 ---
 
@@ -183,16 +194,7 @@ A single call to `StormGenerator.generate()` returns a **StormBundle**:
 
 ---
 
-## 10) Privacy, security & governance
-
-- **PII**: none in waveforms; treat auxiliary metadata (paths, usernames) per company policy.  
-- **Data locality**: simulation and consumption happen inside the secure environment; no external services called.  
-- **Access control**: dataset marked **Company Confidential**; restrict export of large waveform arrays.  
-- **Auditability**: seeds, configs, and generator versions are logged per bundle.
-
----
-
-## 11) How to generate a bundle (reference)
+## 10) How to generate a bundle (reference)
 
 ```python
 from lightning_sim.sim.generator import StormConfig, StormGenerator
@@ -213,53 +215,7 @@ bundle = gen.generate()
 # bundle.df_labels  → tidy stroke records (station × stroke)
 ```
 
-**Window labels** (if you need them stand‑alone):
-```python
-import numpy as np, pandas as pd
 
-WIN, HOP = 1024, 512
-FS       = cfg.fs
-BURST    = int(0.04 * FS)
+## 15) Changelog
 
-n_win = min((len(x)-WIN)//HOP + 1 for x in bundle.quantised.values())
-truth = {s: np.zeros(n_win, bool) for s in bundle.quantised}
-
-for rec in bundle.stroke_records:
-    s0, s1 = rec["sample_idx"], rec["sample_idx"] + BURST - 1
-    w0 = max(0, int(np.ceil((s0+1 - WIN)/HOP)))
-    w1 = min(n_win-1, int(np.floor(s1/HOP)))
-    truth[rec["station"]][w0:w1+1] = True
-```
-
----
-
-## 12) File layout suggestions (for packaging)
-
-```
-/storm_synth/
-  ├── bundles/
-  │   ├── v0.1.0/
-  │   │   ├── <run-id>/
-  │   │   │   ├── quantised_<STN>.npy    # one per station
-  │   │   │   ├── events.parquet
-  │   │   │   ├── stroke_records.parquet
-  │   │   │   ├── df_wave.parquet
-  │   │   │   ├── df_labels.parquet
-  │   │   │   └── meta.json               # StormConfig + versions + checksums
-  │   │   └── ...
-  └── README.md
-```
-
----
-
-## 13) Change log
-
-- **v0.1.0** — Initial public (internal) release: 11‑station network; difficulty flags; full ADC pipeline; window labels aligned to evaluator.
-
----
-
-## 14) References
-
-- Haversine distance — standard great‑circle formula.  
-- Butterworth filter — classic IIR low‑pass design (filtfilt for zero‑phase).  
-- Lightning signal propagation / sferics (introductory literature for context).
+- **v0.1.0** — Initial storm simulation data generator.

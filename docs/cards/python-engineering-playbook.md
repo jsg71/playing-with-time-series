@@ -1,4 +1,3 @@
-
 ---
 title: "Engineering Playbook — Python Good Practices in the Lightning‑Storm Project"
 status: "guide"

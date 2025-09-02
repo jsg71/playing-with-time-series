@@ -3,9 +3,10 @@ title: "Model Card — Graph‑CDAE (GAT‑conditioned Denoising Auto‑Encoder)
 status: "experimental"
 owners:
   - team: Lightning Sim / Detection
-    email: detection-team@example.internal
+    email: john.goodacre@example.co.uk
 model-id: "lightning_sim.detectors.graph_cdae.GraphCDaeModel"
-license: "Internal / Company Confidential"
+classification: "Official Sensitive"
+license: "Official Sensitive"
 tags:
   - unsupervised
   - window-level
@@ -15,6 +16,8 @@ tags:
   - denoising
   - reproducible
 ---
+
+# Model Card — Graph‑CDAE (GAT‑conditioned Denoising Auto‑Encoder)
 
 > **TL;DR**  
 > A **multi‑station** denoising auto‑encoder that conditions each station’s latent code on a fully‑connected **graph** via **GATv2** attention blocks. Windows with high **reconstruction error** are flagged as anomalies, optionally gated by **Hilbert‑envelope peaks** and smoothed by a short majority filter. Outputs per‑station Boolean masks plug‑compatible with the shared evaluator.
@@ -67,38 +70,50 @@ station_m, net_m, _ = evaluate_windowed_model(
 
 ### 4.1 Denoising objective
 For window \(X \in \mathbb{R}^{S\times W}\) normalised to \([-1,1]\) and i.i.d. Gaussian noise \(\varepsilon \sim \mathcal{N}(0, \sigma^2)\),
-\[
+
+$$
 \tilde{X} = X + \varepsilon, \qquad
 \mathcal{L}(\theta) = \frac{1}{S W}\,\| f_\theta(\tilde{X}, G) - X \|_F^2. \tag{1}
-\]
+$$
 
 ### 4.2 GATv2 message passing (per block)
 Let \(h_i = W z_i\) be a linear projection of the station latent. Attention coefficients are
-\[
+
+$$
 e_{ij} = a^\top \sigma( [h_i \Vert h_j] ), \qquad
 \alpha_{ij} = \operatorname{softmax}_j(e_{ij}), \tag{2}
-\]
+$$
+
 and the updated latent is
-\[
-z_i^{(\mathrm{new})} = \mathrm{LN}\big( z_i + \sigma( \textstyle\sum_{j\in\mathcal{N}(i)} \alpha_{ij} h_j ) \big), \tag{3}
-\]
+
+$$
+z_i^{(\mathrm{new})} = \mathrm{LN}\big( z_i + \sigma\!\left( \textstyle\sum_{j\in\mathcal{N}(i)} \alpha_{ij} h_j \right) \big), \tag{3}
+$$
+
 with LayerNorm (LN) and ReLU \(\sigma\). We use **GATv2Conv** with 4 heads (concat=False) in two residual blocks.
 
 ### 4.3 Scoring and gates
 Per station \(i\) and window index \(t\), define the **MAE** reconstruction error
-\[
+
+$$
 r_{i,t} = \frac{1}{W}\sum_{n=1}^{W} \big\lvert \hat{x}_{i,t}[n] - x_{i,t}[n] \big\rvert. \tag{4}
-\]
+$$
+
 Compute robust z‑scores using median and MAD:
-\[
+
+$$
 m_i = \operatorname{median}_t\, r_{i,t},\quad
 d_i = \operatorname{median}_t\, |r_{i,t}-m_i| + \varepsilon,\quad
 z_{i,t} = \frac{r_{i,t}-m_i}{d_i}. \tag{5}
-\]
-Let \(p_{i,t}\) be the **Hilbert‑envelope peak** in window \(t\) at station \(i\). With envelope gate \(T_{\mathrm{env}}\) (e.g., 95‑th percentile) and z‑gate \(\tau\) (e.g., 2.5), the final decision is
-\[
-\text{hot}_{i,t} = \mathbb{1}\big[\, z_{i,t} > \tau \;\wedge\; p_{i,t} > T_{\mathrm{env}}\,\big], \tag{6}
-\]
+$$
+
+Let \(p_{i,t}\) be the **Hilbert‑envelope peak** in window \(t\) at station \(i\).  
+With envelope gate \(T_{\mathrm{env}}\) (e.g., 95‑th percentile) and z‑gate \(\tau\) (e.g., 2.5), the final decision is
+
+$$
+\text{hot}_{i,t} = \mathbb{1}\!\left[\, z_{i,t} > \tau \;\wedge\; p_{i,t} > T_{\mathrm{env}}\,\right], \tag{6}
+$$
+
 optionally **smoothed** by a majority filter (convolution with \([1,1,1]\) ≥ 2).
 
 ---
@@ -206,7 +221,8 @@ hot = model.predict(storm_data.quantised, edge_index=edge_index)
 ## 12) Security & privacy (secure environment)
 
 - **Data locality**: Training/inference are in‑process; no external services.  
-- **PII**: ADC traces contain no PII; redact any side‑channel metadata upstream.  
+- **PII** (*Personally Identifiable Information*): ADC traces contain no PII; redact any side‑channel metadata upstream.  
+- **Classification**: **Official Sensitive** — handle, store, and share in line with your organisation’s Official Sensitive procedures.  
 - **Model artefacts**: Store weights and thresholds per model within secure perimeter only.
 
 ---
@@ -235,7 +251,7 @@ hot = model.predict(storm_data.quantised, edge_index=edge_index)
 ## 15) Governance
 
 - **Owners**: Lightning Sim · Detection  
-- **On‑call**: detection-team@example.internal  
+- **On‑call**: john.goodacre@example.co.uk  
 - **Escalation**: #sim-detection (internal)
 
 ---

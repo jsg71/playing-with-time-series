@@ -9,7 +9,7 @@ language: en
 
 ## Model Details
 - **Task**: Unsupervised point anomaly detection (1D signals)
-- **Algorithm**: Rolling Median Absolute Deviation (MAD), threshold at `median + k*MAD`
+- **Algorithm**: Rolling Median Absolute Deviation (MAD), threshold at \( \operatorname{median} + k\,\mathrm{MAD} \)
 - **Reference impl**: `leela_ml.demo_docs.SimpleMADDetector`
 
 ## Intended Use
@@ -21,7 +21,7 @@ language: en
 - **Hyperparams**: window `w` (default 256), threshold `k` (default 4.0).
 
 ## Evaluation
-- **Scores**: `|x - median| / MAD_w`
+- **Scores**: \( \frac{\lvert x - \operatorname{median}\rvert}{\mathrm{MAD}_w} \)
 - **Metrics**: PR-AUC (imbalanced), ROC-AUC for reference
 - **Ops point**: select `k` for FPR at 0.1–1%
 
@@ -36,5 +36,3 @@ from leela_ml.demo_docs import DetectorConfig, SimpleMADDetector
 m = SimpleMADDetector(DetectorConfig(window=25, k=3.5)).fit(train_signal)
 scores = m.score(test_signal)
 labels = m.predict(test_signal)
-```
-

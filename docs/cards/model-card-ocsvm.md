@@ -1,11 +1,12 @@
----
+--
 title: "Model Card — One‑Class SVM (per‑station)"
 status: "production-candidate"
 owners:
   - team: Lightning Sim / Detection
-    email: detection-team@example.internal
+    email: john.goodacre@example.co.uk
 model-id: "lightning_sim.detectors.ocsvm.ExtendedOCSVM"
-license: "Internal / Company Confidential"
+classification: "Official Sensitive"
+license: "Official Sensitive"
 tags:
   - unsupervised
   - window-level
@@ -14,6 +15,8 @@ tags:
   - feature-based
   - reproducible
 ---
+
+# Model Card — One‑Class SVM (per‑station)
 
 > **TL;DR**  
 > A per‑station **One‑Class SVM (RBF kernel)** over the 16‑D **iso16** feature block. Scales features with **RobustScaler**, chooses **γ** via a fast **median‑heuristic**, performs a tiny **unsupervised grid** over \((\nu,\gamma)\) using a **stability split**, and adds an **extreme‑tail rescue** on the SVM scores. Outputs Boolean window masks plug‑compatible with the shared evaluator; optional 3‑tap majority smoothing reduces flicker.
@@ -67,35 +70,45 @@ station_m, net_m, _ = evaluate_windowed_model(
 
 ### 4.1 One‑Class SVM (Schölkopf et al.)
 We solve
-\[
+
+$$
 \min_{w,\,\rho,\,\xi}\; \tfrac{1}{2}\lVert w\rVert_2^2 + \frac{1}{\nu n}\sum_{i=1}^n \xi_i - \rho
 \quad\text{s.t.}\quad
 \langle w,\,\Phi(x_i)\rangle \ge \rho - \xi_i,\; \xi_i \ge 0,
 \tag{1}
-\]
+$$
+
 with feature map \(\Phi\) and **RBF kernel**
-\[
+
+$$
 K(x,x') = \exp\!\big(-\,\gamma\,\lVert x-x'\rVert_2^2\big). \tag{2}
-\]
+$$
+
 The **decision function** at test point \(x\) is
-\[
+
+$$
 s(x) = \sum_{i\in \mathcal{SV}} \alpha_i\,K(x, x_i) - \rho, \quad
 \text{predict normal if } s(x) > 0,\; \text{anomalous otherwise}. \tag{3}
-\]
+$$
+
 (Scikit‑learn returns larger scores for *more normal* windows.)
 
 ### 4.2 Median‑heuristic for γ
 A common scale choice is
-\[
+
+$$
 \gamma \approx \frac{1}{\operatorname{median}\big\{\lVert x_i - x_j\rVert_2^2\big\}_{i\ne j}}. \tag{4}
-\]
+$$
+
 We approximate the median with **anchors**: pick \(k\) anchors \(A\), compute pairwise squared distances \(\{\lVert X - A\rVert^2\}\), and take the median over that \(O(nk)\) set (robust and fast).
 
 ### 4.3 Extreme‑tail rescue
 Let \(s_i\) be SVM scores over all training windows. We define an additional threshold
-\[
+
+$$
 T_{\text{ext}} = \operatorname{Perc}_{100-\mathrm{EXTREME\_Q}}(\{s_i\}). \tag{5}
-\]
+$$
+
 Final decision per window: **hot** if \(s < 0\) **or** \(s < T_{\text{ext}}\).
 
 ---
@@ -194,7 +207,8 @@ hot = model.predict(storm_data.quantised, fs=109_375, smooth=True)
 ## 11) Security & privacy (secure environment)
 
 - **Data locality**: All operations in‑process; no external services.  
-- **PII**: ADC traces contain no PII; scrub auxiliary metadata upstream.  
+- **PII** (*Personally Identifiable Information*): ADC traces contain no PII; scrub auxiliary metadata upstream.  
+- **Classification**: **Official Sensitive** — handle, store, and share in line with your organisation’s Official Sensitive procedures.  
 - **Reproducibility**: Fix seeds for subsampling/splits; persist scaler, (ν,γ), and thresholds per station.
 
 ---
@@ -222,7 +236,7 @@ hot = model.predict(storm_data.quantised, fs=109_375, smooth=True)
 ## 14) Governance
 
 - **Owners**: Lightning Sim · Detection  
-- **On‑call**: detection-team@example.internal  
+- **On‑call**: john.goodacre@example.co.uk  
 - **Escalation**: #sim-detection (internal)
 
 ---

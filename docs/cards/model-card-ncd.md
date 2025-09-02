@@ -3,9 +3,10 @@ title: "Model Card — NCDDetector (Normalised Compression Distance)"
 status: "experimental"
 owners:
   - team: Lightning Sim / Detection
-    email: detection-team@example.internal
+    email: john.goodacre@example.co.uk
 model-id: "lightning_sim.detectors.ncd.NCDModel"
-license: "Internal / Company Confidential"
+classification: "Official Sensitive"
+license: "Official Sensitive"
 tags:
   - unsupervised
   - anomaly-detection
@@ -14,6 +15,8 @@ tags:
   - reproducible
 ---
 
+# Model Card — NCDDetector (Normalised Compression Distance)
+
 > **TL;DR**  
 > A model‑free, per‑station detector that flags windows whose byte‑encoded waveform fails to compress well with a station‑specific **baseline** window. Supports four encodings (`"bits"`, `"raw"`, `"norm"`, `"tanh"`), uses **bzip2** size as a surrogate distance, and produces **Boolean hot masks** compatible with the shared evaluator.
 
@@ -21,17 +24,17 @@ tags:
 
 ## 1) Model summary
 
-- **Task**: Unsupervised, window‑level lightning stroke detection (one model per *station*, network decision done by evaluator).
-- **Signal**: Raw ADC int16 traces (14‑bit), windowed (default **WIN=1024**, **HOP=512**) at **FS=109 375 Hz**.
-- **Method**: **Normalised Compression Distance (NCD)** between each window and a **baseline** window selected from the most compressible windows (quiet background). Compression with **bzip2, level 9**.
-- **Outputs**: `Dict[str, np.ndarray[bool]]` → station → hot windows.
+- **Task**: Unsupervised, window‑level lightning stroke detection (one model per *station*, network decision done by evaluator).  
+- **Signal**: Raw ADC int16 traces (14‑bit), windowed (default **WIN=1024**, **HOP=512**) at **FS=109 375 Hz**.  
+- **Method**: **Normalised Compression Distance (NCD)** between each window and a **baseline** window selected from the most compressible windows (quiet background). Compression with **bzip2, level 9**.  
+- **Outputs**: `Dict[str, np.ndarray[bool]]` → station → hot windows.  
 - **Evaluator**: Use `evaluate_windowed_model` for station‑ and network‑level metrics (quorum, tolerance, FP clustering).
 
 ---
 
 ## 2) Intended use & scope
 
-- **Primary**: Fast, training‑free baseline to sanity‑check more complex models (IF, CDAE, GNN‑CDAE) and to provide a robust non‑parametric detector when labels are scarce.
+- **Primary**: Fast, training‑free baseline to sanity‑check more complex models (IF, CDAE, GNN‑CDAE) and to provide a robust non‑parametric detector when labels are scarce.  
 - **Out‑of‑scope**: Fine‑grained stroke typing (IC vs CG), localisation, or safety‑critical decisions without downstream verification.
 
 ---
@@ -39,19 +42,20 @@ tags:
 ## 3) Algorithm (at a glance)
 
 1. **Window view** (stride trick): produce matrix `W ∈ ℤ^{n_win×WIN}` per station.  
-2. **Encode** each window → `bytes` using one of:
-   - `"bits"`: sign of first differences, packed (8/byte) — *shape‑only*.
-   - `"raw"`: verbatim int16.
-   - `"norm"`: z‑score → re‑quantise to int16.
-   - `"tanh"`: soft‑clip via `tanh(x/16384)` → int16.
-3. **Compressed sizes**: cache `C(w)` for all windows; select **baseline** as the median within the lowest `BASE_PCT` % by `C`.
+2. **Encode** each window → `bytes` using one of:  
+   - `"bits"`: sign of first differences, packed (8/byte) — *shape‑only*.  
+   - `"raw"`: verbatim int16.  
+   - `"norm"`: z‑score → re‑quantise to int16.  
+   - `"tanh"`: soft‑clip via `tanh(x/16384)` → int16.  
+3. **Compressed sizes**: cache `C(w)` for all windows; select **baseline** as the median within the lowest `BASE_PCT` % by `C`.  
 4. **NCD to baseline** for each window `w`:  
-   \[
-   \text{NCD}(w, b) = \frac{C(w+b) - \min(C(w), C(b))}{\max(C(w), C(b))}
-   \]
-5. **Adaptive threshold** per station:  
-   hot if `NCD > min(percentile, μ + Z·σ)`.
-6. **Output** per station: Boolean mask `hot[nm]` of length `n_win`.
+
+$$
+\text{NCD}(w, b) = \frac{C(w+b) - \min(C(w), C(b))}{\max(C(w), C(b))}.
+$$
+
+5. **Adaptive threshold** per station: hot if `NCD > min(percentile, μ + Z·σ)`.  
+6. **Output** per station: Boolean mask `hot[nm]` of length `n_win`.  
 
 **Determinism**: Given the raw input and encoding, baseline selection and thresholds are deterministic (no stochastic fitting).
 
@@ -156,7 +160,8 @@ Metrics: Precision, Recall, F1 (network). Station P/R/F1 for diagnostics.
 ## 11) Security, privacy & compliance
 
 - **Data locality**: All work is in‑process; no external calls.  
-- **PII**: None expected in ADC; ensure metadata redaction upstream.  
+- **PII** (*Personally Identifiable Information*): None expected in ADC; ensure metadata redaction upstream.  
+- **Classification**: **Official Sensitive** — handle, store, and share in line with your organisation’s Official Sensitive procedures.  
 - **Determinism**: No random components in inference; “fit” is deterministic given inputs.  
 - **Supply chain**: Uses stdlib `bz2`; no shelling out.
 
@@ -194,4 +199,3 @@ Metrics: Precision, Recall, F1 (network). Station P/R/F1 for diagnostics.
 ## 16) References
 
 - Cilibrasi & Vitányi (2005) — *Clustering by Compression* (NCD).
-

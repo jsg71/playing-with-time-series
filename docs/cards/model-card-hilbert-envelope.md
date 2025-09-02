@@ -3,9 +3,10 @@ title: "Model Card — Hilbert‑Envelope Threshold Detector"
 status: "baseline"
 owners:
   - team: Lightning Sim / Detection
-    email: detection-team@example.internal
+    email: john.goodacre@example.co.uk
 model-id: "lightning_sim.detectors.hilbert.HilbertThresholdDetector"
-license: "Internal / Company Confidential"
+classification: "Official Sensitive"
+license: "Official Sensitive"
 tags:
   - unsupervised
   - window-level
@@ -14,6 +15,8 @@ tags:
   - reproducible
 ---
 
+# Model Card — Hilbert‑Envelope Threshold Detector
+
 > **TL;DR**  
 > A training‑free, per‑station baseline detector. It computes the **Hilbert envelope peak** per window and flags the top‑`p` percentile as *hot*. Network‑level decisions are derived via the shared evaluator (quorum over stations).
 
@@ -21,10 +24,10 @@ tags:
 
 ## 1) Model summary
 
-- **Task**: Unsupervised, window‑level lightning‑stroke detection (per‑station).
-- **Signal**: Raw int16 ADC (14‑bit), windowed at **WIN=1024**, **HOP=512**, sampling **FS=109 375 Hz**.
-- **Method**: For each window, compute the **maximum envelope amplitude** using the analytic signal via the **Hilbert transform**; threshold by a **station‑specific percentile**.
-- **Output**: `Dict[str, np.ndarray[bool]]` → station → hot windows.
+- **Task**: Unsupervised, window‑level lightning‑stroke detection (per‑station).  
+- **Signal**: Raw int16 ADC (14‑bit), windowed at **WIN=1024**, **HOP=512**, sampling **FS=109 375 Hz**.  
+- **Method**: For each window, compute the **maximum envelope amplitude** using the analytic signal via the **Hilbert transform**; threshold by a **station‑specific percentile**.  
+- **Output**: `Dict[str, np.ndarray[bool]]` → station → hot windows.  
 - **Evaluator**: `evaluate_windowed_model` (station- and network‑level metrics).
 
 ---
@@ -65,24 +68,32 @@ station_m, net_m, _ = evaluate_windowed_model(
 
 Let \(x[n]\) be a real, discrete‑time waveform within a window of length \(W\).  
 The **analytic signal** is
-\[
+
+$$
 z[n] \,=\, x[n] + j\,\hat{x}[n], \quad
 \mathcal{F}\{\hat{x}\}(\omega) \,=\, -\,j\,\operatorname{sgn}(\omega)\,X(\omega),
 \tag{1}
-\]
+$$
+
 where \(\hat{x}\) is the **Hilbert transform** of \(x\) (implemented via FFT in practice), and \(X(\omega)\) is the DFT of \(x\).  
 The **envelope** is the magnitude
-\[
+
+$$
 e[n] \,=\, |z[n]| \,=\, \sqrt{x[n]^2 + \hat{x}[n]^2}. \tag{2}
-\]
+$$
+
 For window \(i\), define the **envelope peak**
-\[
+
+$$
 p_i \,=\, \max_{0\le n < W} e_i[n]. \tag{3}
-\]
+$$
+
 Let \(\mathcal{P}_p\) denote the \(p\)-th percentile over the set \(\{p_i\}\) for a given station. The **decision rule** is
-\[
-\text{hot}_i \,=\, \mathbb{1}\big[\, p_i \,>\, \mathcal{P}_p(\{p_i\})\,\big]. \tag{4}
-\]
+
+$$
+\text{hot}_i \,=\, \mathbb{1}\!\left[\, p_i > \mathcal{P}_p(\{p_i\})\,\right]. \tag{4}
+$$
+
 This is **scale‑aware** (monotone with amplitude) and **polarity‑agnostic** (envelope magnitude).
 
 **Complexity**  
@@ -162,7 +173,8 @@ hot, n_win = model.fit_predict(
 ## 11) Security & privacy (secure environment)
 
 - **Data locality**: Signal processing is in‑process; no external calls.  
-- **PII**: None expected in ADC streams; redact any auxiliary metadata upstream.  
+- **PII** (*Personally Identifiable Information*): None expected in ADC streams; redact any auxiliary metadata upstream.  
+- **Classification**: **Official Sensitive** — handle, store, and share in line with your organisation’s Official Sensitive procedures.  
 - **Determinism**: No stochastic steps; identical inputs yield identical outputs.
 
 ---
@@ -190,7 +202,7 @@ hot, n_win = model.fit_predict(
 ## 14) Governance
 
 - **Owners**: Lightning Sim · Detection  
-- **On‑call**: detection-team@example.internal  
+- **On‑call**: john.goodacre@example.co.uk  
 - **Escalation**: #sim-detection (internal)
 
 ---

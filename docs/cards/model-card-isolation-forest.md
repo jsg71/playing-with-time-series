@@ -3,9 +3,10 @@ title: "Model Card — Isolation‑Forest (scikit‑learn)"
 status: "baseline"
 owners:
   - team: Lightning Sim / Detection
-    email: detection-team@example.internal
+    email: john.goodacre@example.co.uk
 model-id: "lightning_sim.detectors.isoforest.IsoForestModel"
-license: "Internal / Company Confidential"
+classification: "Official Sensitive"
+license: "Official Sensitive"
 tags:
   - unsupervised
   - window-level
@@ -14,6 +15,8 @@ tags:
   - feature-based
   - reproducible
 ---
+
+# Model Card — Isolation‑Forest (scikit‑learn)
 
 > **TL;DR**  
 > A per‑station **Isolation‑Forest** detector over the 16‑dimensional **iso16** feature block. Uses **RobustScaler** and a small, fixed **contamination** to produce Boolean window masks plug‑compatible with the shared evaluator.
@@ -68,17 +71,22 @@ An Isolation‑Forest isolates a point by recursively partitioning the space wit
 
 - Let \(h(x)\) be the **path length** of sample \(x\) averaged over the forest.  
 - For a subsample size \(n\), the expected path length of an unsuccessful search in a binary tree is
-\[
+
+$$
 c(n) \,=\, 2\,H(n-1) - \frac{2(n-1)}{n}, \quad
-H(m) \,=\, \sum_{k=1}^{m} \frac{1}{k} \approx \ln(m) + \gamma,
+H(m) \,=\, \sum_{k=1}^{m} \frac{1}{k} \;\approx\; \ln(m) + \gamma,
 \tag{1}
-\]
+$$
+
 with Euler–Mascheroni constant \(\gamma\).  
+
 - A common anomaly **score** is
-\[
+
+$$
 s(x) \,=\, 2^{-\,\frac{\mathbb{E}[h(x)]}{c(n)}},
 \tag{2}
-\]
+$$
+
 so **smaller** depths \(\Rightarrow\) **larger** scores (more anomalous).
 
 **scikit‑learn mapping**: `predict` returns **-1** for anomalies, **+1** for normal; `decision_function` is **higher for more normal** points.
@@ -174,7 +182,8 @@ hot = model.predict(storm_data.quantised, fs=109_375)
 ## 11) Security & privacy (secure environment)
 
 - **Data locality**: Training/inference are in‑process; no network calls.  
-- **PII**: ADC streams are expected to be PII‑free; ensure metadata redaction upstream.  
+- **PII** (*Personally Identifiable Information*): ADC streams are expected to be PII‑free; ensure metadata redaction upstream.  
+- **Classification**: **Official Sensitive** — handle, store, and share in line with your organisation’s Official Sensitive procedures.  
 - **Reproducibility**: Fix `random_state`; persist scaler & model per station if you need bit‑identical deployment behaviour.
 
 ---
@@ -202,7 +211,7 @@ hot = model.predict(storm_data.quantised, fs=109_375)
 ## 14) Governance
 
 - **Owners**: Lightning Sim · Detection  
-- **On‑call**: detection-team@example.internal  
+- **On‑call**: john.goodacre@example.co.uk  
 - **Escalation**: #sim-detection (internal)
 
 ---
